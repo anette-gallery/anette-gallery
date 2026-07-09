@@ -83,6 +83,23 @@ export type LeadSaveResult = {
   reason?: string;
 };
 
+export type LeadListItem = {
+  id: string;
+  sourceSystem: string;
+  sourceChannel: string;
+  status: string;
+  fullName?: string;
+  phone?: string;
+  email?: string;
+  totalAmount: number;
+  itemsCount: number;
+  deliveryMethod?: string;
+  comment?: string;
+  rawPayload: unknown;
+  normalizedPayload: unknown;
+  createdAt: string;
+};
+
 export type SyncCatalogItemPayload = {
   sku: string;
   title: string;

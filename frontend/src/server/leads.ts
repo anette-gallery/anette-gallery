@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { isDatabaseConfigured, query } from '@/server/database';
-import type { LeadSaveResult, TildaLeadPayload } from '@/types/api';
+import type {
+  LeadListItem,
+  LeadSaveResult,
+  TildaLeadPayload,
+} from '@/types/api';
 
 let leadRequestsTableEnsured = false;
 
@@ -99,4 +103,77 @@ export async function saveTildaLead(
     source: 'tilda',
     status: 'received',
   };
+}
+
+type LeadRequestRow = {
+  id: string;
+  source_system: string;
+  source_channel: string;
+  status: string;
+  full_name: string | null;
+  phone: string | null;
+  email: string | null;
+  total_amount: string | number;
+  items_count: number;
+  delivery_method: string | null;
+  comment: string | null;
+  raw_payload: unknown;
+  normalized_payload: unknown;
+  created_at: string;
+};
+
+function toLeadListItem(row: LeadRequestRow): LeadListItem {
+  return {
+    id: row.id,
+    sourceSystem: row.source_system,
+    sourceChannel: row.source_channel,
+    status: row.status,
+    fullName: row.full_name ?? undefined,
+    phone: row.phone ?? undefined,
+    email: row.email ?? undefined,
+    totalAmount:
+      typeof row.total_amount === 'number'
+        ? row.total_amount
+        : Number(row.total_amount),
+    itemsCount: row.items_count,
+    deliveryMethod: row.delivery_method ?? undefined,
+    comment: row.comment ?? undefined,
+    rawPayload: row.raw_payload,
+    normalizedPayload: row.normalized_payload,
+    createdAt: row.created_at,
+  };
+}
+
+export async function listRecentLeads(limit = 20): Promise<LeadListItem[]> {
+  if (!isDatabaseConfigured()) {
+    return [];
+  }
+
+  await ensureLeadRequestsTable();
+
+  const rows = await query<LeadRequestRow>(
+    `
+      SELECT
+        id,
+        source_system,
+        source_channel,
+        status,
+        full_name,
+        phone,
+        email,
+        total_amount,
+        items_count,
+        delivery_method,
+        comment,
+        raw_payload,
+        normalized_payload,
+        created_at
+      FROM lead_requests
+      ORDER BY created_at DESC
+      LIMIT $1
+    `,
+    [limit],
+  );
+
+  return rows.map(toLeadListItem);
 }

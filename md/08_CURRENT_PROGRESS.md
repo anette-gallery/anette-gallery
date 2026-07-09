@@ -20,12 +20,14 @@
   - `POST /api/v1/checkout/gift-card/validate`
   - `POST /api/v1/orders`
   - `POST /api/v1/webhooks/tilda/order`
+  - `GET /api/v1/leads`
   - `POST /api/v1/catalog/sync`
   - `POST /api/v1/catalog/sync/batch`
 - добавлена ручная валидация payload вместо `NestJS DTO`;
 - сохранены режимы `stub/live` для `Maxma`, `1С`, `Tilda`;
 - `Tilda` webhook заказа переведен в сценарий `lead/request`: заявка сохраняется отдельно, даже если сайт пока работает без онлайн-оплаты;
 - для `Tilda` добавлено хранение заявок в таблице `lead_requests`;
+- добавлен endpoint просмотра последних заявок, чтобы быстро проверять фактический payload из `Tilda`;
 - зафиксированы бизнес-правила скидок и fallback-сценарии.
 
 ### Frontend
