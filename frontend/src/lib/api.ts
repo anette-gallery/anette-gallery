@@ -1,28 +1,10 @@
-export type CheckoutItemInput = {
-  sku: string;
-  quantity: number;
-  price: number;
-};
-
-export type CalculateCheckoutPayload = {
-  phone?: string;
-  promoCode?: string;
-  giftCardNumber?: string;
-  items: CheckoutItemInput[];
-};
-
-export type CheckoutCalculationResponse = {
-  status: string;
-  target: string;
-  action: string;
-  subtotal: number;
-  total: number;
-  discounts: unknown[];
-  payload: CalculateCheckoutPayload;
-};
+import type {
+  CalculateCheckoutPayload,
+  CheckoutCalculationResponse,
+} from '@/types/api';
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000/api/v1';
+  process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || '/api/v1';
 
 async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {

@@ -1,11 +1,11 @@
 'use client';
 
 import { FormEvent, useMemo, useState } from 'react';
-import {
-  calculateCheckout,
-  type CalculateCheckoutPayload,
-  type CheckoutCalculationResponse,
-} from '@/lib/api';
+import { calculateCheckout } from '@/lib/api';
+import type {
+  CalculateCheckoutPayload,
+  CheckoutCalculationResponse,
+} from '@/types/api';
 import styles from './page.module.css';
 
 const initialPayload: CalculateCheckoutPayload = {
@@ -69,7 +69,7 @@ export default function CheckoutPage() {
           <p className={styles.eyebrow}>Checkout Demo</p>
           <h1>Тестовая форма расчета корзины</h1>
           <p className={styles.description}>
-            Страница отправляет данные на backend endpoint
+            Страница отправляет данные в Next.js endpoint
             <code>/api/v1/checkout/calculate</code> и показывает результат серверного
             расчета.
           </p>
@@ -190,14 +190,14 @@ export default function CheckoutPage() {
             </div>
 
             <button className={styles.submit} type="submit" disabled={isLoading}>
-              {isLoading ? 'Считаем...' : 'Рассчитать на backend'}
+              {isLoading ? 'Считаем...' : 'Рассчитать в API'}
             </button>
 
             {error ? <p className={styles.error}>{error}</p> : null}
           </form>
 
           <aside className={styles.result}>
-            <h2>Ответ backend</h2>
+            <h2>Ответ API</h2>
             {result ? (
               <>
                 <div className={styles.resultGrid}>
