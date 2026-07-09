@@ -161,10 +161,12 @@ function normalizeOrderItem(
 
 function extractItems(record: Record<string, unknown>): OrderItem[] {
   const lookup = buildLookup(record);
+  const payment = isRecord(record.payment) ? record.payment : null;
   const candidates = [
     getValue(lookup, ['items', 'products', 'goods', 'orderitems', 'товары']),
     record.items,
     record.products,
+    payment?.products,
   ];
 
   for (const candidate of candidates) {
@@ -205,6 +207,8 @@ export function normalizeTildaLeadPayload(input: unknown): TildaLeadPayload {
   }
 
   const lookup = buildLookup(input);
+  const payment = isRecord(input.payment) ? input.payment : null;
+  const paymentLookup = payment ? buildLookup(payment) : null;
   const items = extractItems(input);
   const totalAmount =
     getNumberValue(lookup, [
@@ -217,11 +221,27 @@ export function normalizeTildaLeadPayload(input: unknown): TildaLeadPayload {
       'сумма',
       'sumtotal',
     ]) ??
+    (paymentLookup
+      ? getNumberValue(paymentLookup, [
+          'amount',
+          'subtotal',
+          'sum',
+          'summ',
+          'total',
+        ])
+      : undefined) ??
     items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
 
   return {
     customer: {
-      fullName: getStringValue(lookup, ['fullName', 'fio', 'name', 'фио', 'имя']),
+      fullName: getStringValue(lookup, [
+        'fullName',
+        'fio',
+        'name',
+        'фио',
+        'имя',
+        'ma_name',
+      ]),
       phone: getStringValue(lookup, [
         'phone',
         'telephone',
@@ -229,8 +249,9 @@ export function normalizeTildaLeadPayload(input: unknown): TildaLeadPayload {
         'tel',
         'mobile',
         'телефон',
+        'ma_phone',
       ]),
-      email: getStringValue(lookup, ['email', 'mail', 'e-mail', 'почта']),
+      email: getStringValue(lookup, ['email', 'mail', 'e-mail', 'почта', 'ma_email']),
     },
     items,
     totalAmount,
@@ -253,14 +274,25 @@ export function normalizeTildaLeadPayload(input: unknown): TildaLeadPayload {
       'shipping',
       'доставка',
       'вариантыдоставки',
-    ]),
+    ]) ??
+      (paymentLookup
+        ? getStringValue(paymentLookup, [
+            'delivery',
+            'deliverymethod',
+            'shipping',
+            'delivery_address',
+          ])
+        : undefined),
     comment: getStringValue(lookup, [
       'comment',
       'message',
       'text',
       'commentary',
       'комментарий',
-    ]),
+    ]) ??
+      (paymentLookup
+        ? getStringValue(paymentLookup, ['delivery_comment', 'comment', 'message'])
+        : undefined),
   };
 }
 
