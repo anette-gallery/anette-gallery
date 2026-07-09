@@ -56,7 +56,28 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
   try {
     const rawPayload = await readWebhookPayload(request);
-    const normalizedPayload = parseTildaOrderPayload(rawPayload);
+    let normalizedPayload;
+
+    try {
+      normalizedPayload = parseTildaOrderPayload(rawPayload);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes('Поле "items" должно содержать хотя бы один товар')
+      ) {
+        return jsonResponse({
+          status: 'accepted',
+          source: 'tilda-webhook',
+          mode: 'validation',
+          message:
+            'Webhook сохранен. Tilda прислала тестовый запрос без товаров, это допустимо на этапе подключения.',
+          rawPayload,
+        });
+      }
+
+      throw error;
+    }
+
     const result = await createOrder(normalizedPayload);
 
     return jsonResponse({
