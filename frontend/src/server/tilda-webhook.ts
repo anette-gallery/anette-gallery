@@ -1,5 +1,9 @@
 import { parseCreateOrderPayload } from '@/server/validation';
-import type { CreateOrderPayload, OrderItem } from '@/types/api';
+import type {
+  CreateOrderPayload,
+  OrderItem,
+  TildaLeadPayload,
+} from '@/types/api';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -177,6 +181,25 @@ function extractItems(record: Record<string, unknown>): OrderItem[] {
 }
 
 export function parseTildaOrderPayload(input: unknown): CreateOrderPayload {
+  return parseCreateOrderPayload(toCreateOrderCandidate(normalizeTildaLeadPayload(input)));
+}
+
+function toCreateOrderCandidate(payload: TildaLeadPayload) {
+  return {
+    customer: {
+      fullName: payload.customer.fullName ?? 'Покупатель с Tilda',
+      phone: payload.customer.phone,
+      email: payload.customer.email,
+    },
+    items: payload.items,
+    totalAmount: payload.totalAmount,
+    promoCode: payload.promoCode,
+    giftCardNumber: payload.giftCardNumber,
+    loyaltyCardNumber: payload.loyaltyCardNumber,
+  };
+}
+
+export function normalizeTildaLeadPayload(input: unknown): TildaLeadPayload {
   if (!isRecord(input)) {
     throw new Error('Webhook Tilda должен передавать объект в теле запроса');
   }
@@ -196,11 +219,9 @@ export function parseTildaOrderPayload(input: unknown): CreateOrderPayload {
     ]) ??
     items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
 
-  return parseCreateOrderPayload({
+  return {
     customer: {
-      fullName:
-        getStringValue(lookup, ['fullName', 'fio', 'name', 'фио', 'имя']) ??
-        'Покупатель с Tilda',
+      fullName: getStringValue(lookup, ['fullName', 'fio', 'name', 'фио', 'имя']),
       phone: getStringValue(lookup, [
         'phone',
         'telephone',
@@ -226,5 +247,44 @@ export function parseTildaOrderPayload(input: unknown): CreateOrderPayload {
       'cardNumber',
       'карта',
     ]),
-  });
+    deliveryMethod: getStringValue(lookup, [
+      'delivery',
+      'deliverymethod',
+      'shipping',
+      'доставка',
+      'вариантыдоставки',
+    ]),
+    comment: getStringValue(lookup, [
+      'comment',
+      'message',
+      'text',
+      'commentary',
+      'комментарий',
+    ]),
+  };
+}
+
+export function isEmptyTildaLeadPayload(payload: TildaLeadPayload): boolean {
+  return (
+    !payload.customer.fullName &&
+    !payload.customer.phone &&
+    !payload.customer.email &&
+    payload.items.length === 0 &&
+    payload.totalAmount === 0 &&
+    !payload.comment
+  );
+}
+
+export function toCreateOrderPayload(
+  payload: TildaLeadPayload,
+): CreateOrderPayload | null {
+  if (!payload.customer.fullName || !payload.customer.phone || payload.items.length === 0) {
+    return null;
+  }
+
+  try {
+    return parseCreateOrderPayload(toCreateOrderCandidate(payload));
+  } catch {
+    return null;
+  }
 }

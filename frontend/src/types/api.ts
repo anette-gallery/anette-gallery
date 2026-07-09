@@ -58,6 +58,31 @@ export type CreateOrderPayload = {
   loyaltyCardNumber?: string;
 };
 
+export type TildaLeadCustomer = {
+  fullName?: string;
+  phone?: string;
+  email?: string;
+};
+
+export type TildaLeadPayload = {
+  customer: TildaLeadCustomer;
+  items: OrderItem[];
+  totalAmount: number;
+  promoCode?: string;
+  giftCardNumber?: string;
+  loyaltyCardNumber?: string;
+  deliveryMethod?: string;
+  comment?: string;
+};
+
+export type LeadSaveResult = {
+  saved: boolean;
+  id?: string;
+  source: string;
+  status: string;
+  reason?: string;
+};
+
 export type SyncCatalogItemPayload = {
   sku: string;
   title: string;

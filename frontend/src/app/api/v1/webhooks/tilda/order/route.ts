@@ -1,6 +1,10 @@
 import { errorResponse, jsonResponse, optionsResponse } from '@/server/http';
-import { createOrder } from '@/server/services';
-import { parseTildaOrderPayload } from '@/server/tilda-webhook';
+import { saveTildaLead } from '@/server/leads';
+import {
+  isEmptyTildaLeadPayload,
+  normalizeTildaLeadPayload,
+  toCreateOrderPayload,
+} from '@/server/tilda-webhook';
 
 function appendValue(
   target: Record<string, unknown>,
@@ -56,35 +60,32 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
   try {
     const rawPayload = await readWebhookPayload(request);
-    let normalizedPayload;
+    const normalizedPayload = normalizeTildaLeadPayload(rawPayload);
 
-    try {
-      normalizedPayload = parseTildaOrderPayload(rawPayload);
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message.includes('Поле "items" должно содержать хотя бы один товар')
-      ) {
-        return jsonResponse({
-          status: 'accepted',
-          source: 'tilda-webhook',
-          mode: 'validation',
-          message:
-            'Webhook сохранен. Tilda прислала тестовый запрос без товаров, это допустимо на этапе подключения.',
-          rawPayload,
-        });
-      }
-
-      throw error;
+    if (isEmptyTildaLeadPayload(normalizedPayload)) {
+      return jsonResponse({
+        status: 'accepted',
+        source: 'tilda-webhook',
+        mode: 'validation',
+        message:
+          'Webhook сохранен. Tilda прислала тестовый запрос без данных заказа, это допустимо на этапе подключения.',
+        rawPayload,
+      });
     }
 
-    const result = await createOrder(normalizedPayload);
+    const lead = await saveTildaLead(normalizedPayload, rawPayload);
+    const orderPreview = toCreateOrderPayload(normalizedPayload);
 
     return jsonResponse({
       status: 'accepted',
       source: 'tilda-webhook',
+      mode: 'lead',
+      lead,
+      orderReady: Boolean(orderPreview),
       normalizedPayload,
-      result,
+      message: orderPreview
+        ? 'Заявка из Tilda сохранена. При необходимости ее можно позже переводить в заказ.'
+        : 'Заявка из Tilda сохранена как лид без полного состава заказа.',
     });
   } catch (error) {
     return errorResponse(
