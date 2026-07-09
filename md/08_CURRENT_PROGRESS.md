@@ -19,6 +19,7 @@
   - `POST /api/v1/checkout/promo-code/validate`
   - `POST /api/v1/checkout/gift-card/validate`
   - `POST /api/v1/orders`
+  - `POST /api/v1/webhooks/tilda/order`
   - `POST /api/v1/catalog/sync`
   - `POST /api/v1/catalog/sync/batch`
 - добавлена ручная валидация payload вместо `NestJS DTO`;
@@ -61,6 +62,7 @@
 
 - кодовая база уже переведена на единый `Next.js` API-слой;
 - `backend` сохранен только как архив референсной версии и не нужен для деплоя;
+- добавлен отдельный webhook endpoint для заказов из `Tilda`, чтобы не смешивать внешний payload `Tilda` и внутренний API заказа;
 - следующим шагом можно подключать реальные доступы `Tilda`, `Maxma`, `1С` и заводить боевые webhook/JS-сценарии.
 
 ## Что нужно дальше
