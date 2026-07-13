@@ -47,6 +47,27 @@ function splitFullName(fullName: string) {
   };
 }
 
+function buildClientInfo(payload: SyncCustomerPayload) {
+  const { surname, name, patronymicName } = splitFullName(payload.fullName);
+
+  return {
+    phoneNumber: normalizePhone(payload.phone),
+    fullName: payload.fullName,
+    ...(payload.email ? { email: payload.email } : {}),
+    ...(payload.loyaltyCardNumber ? { card: payload.loyaltyCardNumber } : {}),
+    ...(surname ? { surname } : {}),
+    ...(name ? { name } : {}),
+    ...(patronymicName ? { patronymicName } : {}),
+    ...(payload.address
+      ? {
+          extraFields: {
+            address: payload.address,
+          },
+        }
+      : {}),
+  };
+}
+
 function buildShop() {
   const config = getAppConfig();
 
@@ -235,30 +256,73 @@ async function post(
 }
 
 export function syncCustomer(payload: SyncCustomerPayload) {
-  const { surname, name, patronymicName } = splitFullName(payload.fullName);
+  const phoneNumber = normalizePhone(payload.phone);
+  const client = buildClientInfo(payload);
 
-  return post(
-    getAppConfig().integrations.maxma.customerSyncPath,
+  if (!isLiveEnabled(getAppConfig().integrations.maxma.customerSyncPath)) {
+    return post(
+      getAppConfig().integrations.maxma.customerSyncPath,
+      'sync-customer',
+      {
+        phoneNumber,
+        client,
+      },
+    );
+  }
+
+  return syncCustomerLive(phoneNumber, client);
+}
+
+async function syncCustomerLive(
+  phoneNumber: string,
+  client: ReturnType<typeof buildClientInfo>,
+) {
+  const config = getAppConfig();
+  const updateResult = await post(
+    config.integrations.maxma.customerSyncPath,
     'sync-customer',
     {
-      phoneNumber: normalizePhone(payload.phone),
-      client: {
-        fullName: payload.fullName,
-        ...(payload.email ? { email: payload.email } : {}),
-        ...(payload.loyaltyCardNumber ? { card: payload.loyaltyCardNumber } : {}),
-        ...(surname ? { surname } : {}),
-        ...(name ? { name } : {}),
-        ...(patronymicName ? { patronymicName } : {}),
-        ...(payload.address
-          ? {
-              extraFields: {
-                address: payload.address,
-              },
-            }
-          : {}),
-      },
+      phoneNumber,
+      client,
     },
   );
+
+  const responseBody =
+    typeof updateResult.responseBody === 'object' &&
+    updateResult.responseBody !== null
+      ? (updateResult.responseBody as Record<string, unknown>)
+      : null;
+  const errorCode =
+    responseBody && typeof responseBody.errorCode === 'number'
+      ? responseBody.errorCode
+      : null;
+
+  if (updateResult.status === 'ok') {
+    return {
+      ...updateResult,
+      operation: 'updated',
+    };
+  }
+
+  if (errorCode !== 3) {
+    return {
+      ...updateResult,
+      operation: 'update_failed',
+    };
+  }
+
+  const createResult = await post(
+    config.integrations.maxma.newClientPath,
+    'sync-customer',
+    {
+      client,
+    },
+  );
+
+  return {
+    ...createResult,
+    operation: createResult.status === 'ok' ? 'created' : 'create_failed',
+  };
 }
 
 export function applyLoyalty(payload: CalculateCheckoutPayload) {

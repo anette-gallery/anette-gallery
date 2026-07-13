@@ -18,6 +18,7 @@ export type AppConfig = {
       apiKey: string | null;
       shopCode: string | null;
       shopName: string | null;
+      newClientPath: string | null;
       customerSyncPath: string | null;
       loyaltyApplyPath: string | null;
       checkoutCalculatePath: string | null;
@@ -88,6 +89,8 @@ export function getAppConfig(): AppConfig {
         apiKey: toOptionalString(process.env.MAXMA_API_KEY),
         shopCode: toOptionalString(process.env.MAXMA_SHOP_CODE),
         shopName: toOptionalString(process.env.MAXMA_SHOP_NAME),
+        newClientPath:
+          toOptionalString(process.env.MAXMA_NEW_CLIENT_PATH) ?? '/new-client',
         customerSyncPath:
           toOptionalString(process.env.MAXMA_CUSTOMER_SYNC_PATH) ??
           '/update-client',
