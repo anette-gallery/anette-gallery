@@ -16,6 +16,8 @@ export type AppConfig = {
     maxma: {
       baseUrl: string | null;
       apiKey: string | null;
+      shopCode: string | null;
+      shopName: string | null;
       customerSyncPath: string | null;
       loyaltyApplyPath: string | null;
       checkoutCalculatePath: string | null;
@@ -84,23 +86,25 @@ export function getAppConfig(): AppConfig {
       maxma: {
         baseUrl: toOptionalString(process.env.MAXMA_API_URL),
         apiKey: toOptionalString(process.env.MAXMA_API_KEY),
+        shopCode: toOptionalString(process.env.MAXMA_SHOP_CODE),
+        shopName: toOptionalString(process.env.MAXMA_SHOP_NAME),
         customerSyncPath:
           toOptionalString(process.env.MAXMA_CUSTOMER_SYNC_PATH) ??
-          '/customers/sync',
+          '/update-client',
         loyaltyApplyPath:
           toOptionalString(process.env.MAXMA_LOYALTY_APPLY_PATH) ??
-          '/checkout/loyalty/apply',
+          '/v2/calculate-purchase',
         checkoutCalculatePath:
           toOptionalString(process.env.MAXMA_CHECKOUT_CALCULATE_PATH) ??
-          '/checkout/calculate',
+          '/v2/calculate-purchase',
         promoValidatePath:
           toOptionalString(process.env.MAXMA_PROMO_VALIDATE_PATH) ??
-          '/checkout/promo-code/validate',
+          '/v2/calculate-purchase',
         giftCardValidatePath:
           toOptionalString(process.env.MAXMA_GIFT_CARD_VALIDATE_PATH) ??
-          '/checkout/gift-card/validate',
+          '/v2/calculate-purchase',
         orderCreatePath:
-          toOptionalString(process.env.MAXMA_ORDER_CREATE_PATH) ?? '/orders',
+          toOptionalString(process.env.MAXMA_ORDER_CREATE_PATH) ?? '/set-purchase',
       },
       onec: {
         baseUrl: toOptionalString(process.env.ONEC_API_URL),
