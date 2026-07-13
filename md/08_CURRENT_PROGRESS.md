@@ -20,6 +20,7 @@
   - `POST /api/v1/checkout/gift-card/validate`
   - `POST /api/v1/orders`
   - `POST /api/v1/webhooks/tilda/order`
+  - `POST /api/v1/webhooks/maxma`
   - `GET /api/v1/leads`
   - `POST /api/v1/catalog/sync`
   - `POST /api/v1/catalog/sync/batch`
@@ -27,6 +28,7 @@
 - сохранены режимы `stub/live` для `Maxma`, `1С`, `Tilda`;
 - `Tilda` webhook заказа переведен в сценарий `lead/request`: заявка сохраняется отдельно, даже если сайт пока работает без онлайн-оплаты;
 - для `Tilda` добавлено хранение заявок в таблице `lead_requests`;
+- для `MAXMA` добавлен отдельный webhook endpoint с поддержкой `HTTP Basic Auth` через env и хранением входящих событий в таблице `maxma_webhook_events`;
 - добавлен endpoint просмотра последних заявок, чтобы быстро проверять фактический payload из `Tilda`;
 - зафиксированы бизнес-правила скидок и fallback-сценарии.
 
@@ -67,13 +69,16 @@
 - кодовая база уже переведена на единый `Next.js` API-слой;
 - `backend` сохранен только как архив референсной версии и не нужен для деплоя;
 - добавлен отдельный webhook endpoint для заказов из `Tilda`, чтобы не смешивать внешний payload `Tilda` и внутренний API заказа;
+- подготовлен отдельный webhook endpoint `POST /api/v1/webhooks/maxma` для входящих событий `MAXMA`;
+- endpoint принимает `application/json`, поддерживает `HTTP Basic Auth`, умеет принимать одно событие или массив событий и сохраняет их в таблицу `maxma_webhook_events` с дедупликацией по `eventId`;
 - текущий практический сценарий по `Tilda`: корзина/форма создает заявку, а не оплаченный заказ;
 - следующим шагом можно подключать реальные доступы `Tilda`, `Maxma`, `1С` и заводить боевые webhook/JS-сценарии.
 
 ## Что нужно дальше
 
-1. добавить реальные env-переменные в `Vercel`;
-2. подключить живую `PostgreSQL`;
-3. настроить webhook и кастомный JS со стороны `Tilda`;
-4. переключить интеграции из `stub` в `live`;
-5. при необходимости удалить или архивировать `backend` окончательно после полного подтверждения миграции.
+1. добавить в `Vercel` значения `MAXMA_WEBHOOK_USERNAME` и `MAXMA_WEBHOOK_PASSWORD`;
+2. передать в поддержку `MAXMA` webhook URL `https://anette-gallery-frontend.vercel.app/api/v1/webhooks/maxma`;
+3. подключить живую `PostgreSQL`;
+4. настроить webhook и кастомный JS со стороны `Tilda`;
+5. переключить интеграции из `stub` в `live`;
+6. при необходимости удалить или архивировать `backend` окончательно после полного подтверждения миграции.

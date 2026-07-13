@@ -100,6 +100,21 @@ export type LeadListItem = {
   createdAt: string;
 };
 
+export type MaxmaWebhookEvent = {
+  event: string;
+  eventId: string;
+  eventTime: string;
+  source: 'api' | 'internal' | string;
+  payload: Record<string, unknown>;
+};
+
+export type MaxmaWebhookSaveResult = {
+  accepted: boolean;
+  duplicate: boolean;
+  eventId: string;
+  event: string;
+};
+
 export type SyncCatalogItemPayload = {
   sku: string;
   title: string;
