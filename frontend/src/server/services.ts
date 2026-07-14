@@ -130,11 +130,33 @@ export function calculateCheckout(payload: CalculateCheckoutPayload) {
   return calculateCheckoutInMaxma(payload);
 }
 
-export function createOrder(
+export async function createOrder(
   payload: CreateOrderPayload,
   options?: { txid?: string },
 ) {
-  return createOrderInMaxma(payload, options);
+  const customerSync = await syncCustomerInMaxma({
+    fullName: payload.customer.fullName,
+    phone: payload.customer.phone,
+    email: payload.customer.email,
+    loyaltyCardNumber: payload.loyaltyCardNumber,
+  });
+
+  if (customerSync.status === 'error') {
+    return {
+      ...customerSync,
+      action: 'create-order',
+      orderSkipped: true,
+      reason: 'customer_sync_failed',
+      orderPayload: payload,
+    };
+  }
+
+  const order = await createOrderInMaxma(payload, options);
+
+  return {
+    ...order,
+    customerSync,
+  };
 }
 
 function buildOverrideMeta(payload: SyncCatalogItemPayload) {
