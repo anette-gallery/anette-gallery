@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { getAppConfig, hasRealValue } from '@/server/config';
 import type {
   CalculateCheckoutPayload,
@@ -242,6 +243,41 @@ async function post(
       : response.ok
         ? 'ok'
         : 'error';
+  // #region debug-point C:maxma-post-result
+  (() => {
+    const p = '.dbg/tilda-maxma-order.env';
+    let u = 'http://127.0.0.1:7777/event';
+    let s = 'tilda-maxma-order';
+    try {
+      const e = readFileSync(p, 'utf8');
+      u = e.match(/DEBUG_SERVER_URL=(.+)/)?.[1] || u;
+      s = e.match(/DEBUG_SESSION_ID=(.+)/)?.[1] || s;
+    } catch {}
+    fetch(u, {
+      method: 'POST',
+      body: JSON.stringify({
+        sessionId: s,
+        runId: 'pre-fix',
+        hypothesisId: action === 'sync-customer' ? 'B' : 'C',
+        location: `integrations/maxma:post:${action}`,
+        msg: '[DEBUG] MAXMA API request completed',
+        data: {
+          action,
+          url,
+          responseStatus,
+          responseStatusCode: response.status,
+          errorCode:
+            typeof responseBody === 'object' &&
+            responseBody !== null &&
+            'errorCode' in responseBody
+              ? responseBody.errorCode
+              : null,
+        },
+        ts: Date.now(),
+      }),
+    }).catch(() => {});
+  })();
+  // #endregion
 
   return {
     status: responseStatus,
@@ -504,13 +540,59 @@ export function createOrder(
   payload: CreateOrderPayload,
   options: { txid?: string } = {},
 ) {
-  return post(
+  return createOrderLive(payload, options);
+}
+
+async function createOrderLive(
+  payload: CreateOrderPayload,
+  options: { txid?: string } = {},
+) {
+  const txid = options.txid ?? `lapaloma-${Date.now()}`;
+  const reservation = await post(
     getAppConfig().integrations.maxma.orderCreatePath,
     'create-order',
     {
-      txid: options.txid ?? `lapaloma-${Date.now()}`,
+      txid,
       calculationQuery: buildOrderCalculationQuery(payload),
     },
     { requiresShop: true },
   );
+
+  if (reservation.status !== 'ok') {
+    return reservation;
+  }
+
+  const responseBody =
+    typeof reservation.responseBody === 'object' && reservation.responseBody !== null
+      ? (reservation.responseBody as Record<string, unknown>)
+      : null;
+  const ticket =
+    responseBody && typeof responseBody.ticket === 'string' && responseBody.ticket.trim()
+      ? responseBody.ticket.trim()
+      : null;
+
+  if (!ticket) {
+    return {
+      ...reservation,
+      status: 'error',
+      reason: 'ticket_not_returned',
+    };
+  }
+
+  const confirmation = await post(
+    getAppConfig().integrations.maxma.confirmTicketPath,
+    'confirm-ticket',
+    {
+      ticket,
+      txid,
+    },
+  );
+
+  return {
+    ...confirmation,
+    action: 'create-order',
+    ticket,
+    reservation,
+    confirmation,
+  };
 }

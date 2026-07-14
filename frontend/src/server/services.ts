@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { getAppConfig, hasRealValue } from '@/server/config';
 import { checkDatabaseConnection, isDatabaseConfigured } from '@/server/database';
 import {
@@ -134,12 +135,77 @@ export async function createOrder(
   payload: CreateOrderPayload,
   options?: { txid?: string },
 ) {
+  // #region debug-point B:customer-sync-start
+  (() => {
+    const p = '.dbg/tilda-maxma-order.env';
+    let u = 'http://127.0.0.1:7777/event';
+    let s = 'tilda-maxma-order';
+    try {
+      const e = readFileSync(p, 'utf8');
+      u = e.match(/DEBUG_SERVER_URL=(.+)/)?.[1] || u;
+      s = e.match(/DEBUG_SESSION_ID=(.+)/)?.[1] || s;
+    } catch {}
+    fetch(u, {
+      method: 'POST',
+      body: JSON.stringify({
+        sessionId: s,
+        runId: 'pre-fix',
+        hypothesisId: 'B',
+        location: 'services:createOrder:customerSync:start',
+        msg: '[DEBUG] Starting customer sync before MAXMA order',
+        data: {
+          txid: options?.txid ?? null,
+          phone: payload.customer.phone,
+          email: payload.customer.email ?? null,
+          loyaltyCardNumber: payload.loyaltyCardNumber ?? null,
+        },
+        ts: Date.now(),
+      }),
+    }).catch(() => {});
+  })();
+  // #endregion
   const customerSync = await syncCustomerInMaxma({
     fullName: payload.customer.fullName,
     phone: payload.customer.phone,
     email: payload.customer.email,
     loyaltyCardNumber: payload.loyaltyCardNumber,
   });
+  // #region debug-point B:customer-sync-result
+  (() => {
+    const p = '.dbg/tilda-maxma-order.env';
+    let u = 'http://127.0.0.1:7777/event';
+    let s = 'tilda-maxma-order';
+    try {
+      const e = readFileSync(p, 'utf8');
+      u = e.match(/DEBUG_SERVER_URL=(.+)/)?.[1] || u;
+      s = e.match(/DEBUG_SESSION_ID=(.+)/)?.[1] || s;
+    } catch {}
+    fetch(u, {
+      method: 'POST',
+      body: JSON.stringify({
+        sessionId: s,
+        runId: 'pre-fix',
+        hypothesisId: 'B',
+        location: 'services:createOrder:customerSync:result',
+        msg: '[DEBUG] Customer sync finished before MAXMA order',
+        data: {
+          status: customerSync.status ?? null,
+          operation:
+            typeof customerSync === 'object' && customerSync !== null && 'operation' in customerSync
+              ? customerSync.operation
+              : null,
+          responseStatusCode:
+            typeof customerSync === 'object' &&
+            customerSync !== null &&
+            'responseStatusCode' in customerSync
+              ? customerSync.responseStatusCode
+              : null,
+        },
+        ts: Date.now(),
+      }),
+    }).catch(() => {});
+  })();
+  // #endregion
 
   if (customerSync.status === 'error') {
     return {
@@ -152,6 +218,36 @@ export async function createOrder(
   }
 
   const order = await createOrderInMaxma(payload, options);
+  // #region debug-point C:create-order-result
+  (() => {
+    const p = '.dbg/tilda-maxma-order.env';
+    let u = 'http://127.0.0.1:7777/event';
+    let s = 'tilda-maxma-order';
+    try {
+      const e = readFileSync(p, 'utf8');
+      u = e.match(/DEBUG_SERVER_URL=(.+)/)?.[1] || u;
+      s = e.match(/DEBUG_SESSION_ID=(.+)/)?.[1] || s;
+    } catch {}
+    fetch(u, {
+      method: 'POST',
+      body: JSON.stringify({
+        sessionId: s,
+        runId: 'pre-fix',
+        hypothesisId: 'C',
+        location: 'services:createOrder:result',
+        msg: '[DEBUG] MAXMA order request finished',
+        data: {
+          status: order.status ?? null,
+          responseStatusCode:
+            typeof order === 'object' && order !== null && 'responseStatusCode' in order
+              ? order.responseStatusCode
+              : null,
+        },
+        ts: Date.now(),
+      }),
+    }).catch(() => {});
+  })();
+  // #endregion
 
   return {
     ...order,

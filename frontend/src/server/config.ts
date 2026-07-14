@@ -27,6 +27,7 @@ export type AppConfig = {
       promoValidatePath: string | null;
       giftCardValidatePath: string | null;
       orderCreatePath: string | null;
+      confirmTicketPath: string | null;
     };
     onec: {
       baseUrl: string | null;
@@ -112,6 +113,9 @@ export function getAppConfig(): AppConfig {
           '/v2/calculate-purchase',
         orderCreatePath:
           toOptionalString(process.env.MAXMA_ORDER_CREATE_PATH) ?? '/set-purchase',
+        confirmTicketPath:
+          toOptionalString(process.env.MAXMA_CONFIRM_TICKET_PATH) ??
+          '/confirm-ticket',
       },
       onec: {
         baseUrl: toOptionalString(process.env.ONEC_API_URL),

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { errorResponse, jsonResponse, optionsResponse } from '@/server/http';
 import { saveTildaLead } from '@/server/leads';
 import { createOrder } from '@/server/services';
@@ -90,6 +91,35 @@ export async function POST(request: Request) {
   try {
     const rawPayload = await readWebhookPayload(request);
     const normalizedPayload = normalizeTildaLeadPayload(rawPayload);
+    // #region debug-point D:tilda-webhook-normalized
+    (() => {
+      const p = '.dbg/tilda-maxma-order.env';
+      let u = 'http://127.0.0.1:7777/event';
+      let s = 'tilda-maxma-order';
+      try {
+        const e = readFileSync(p, 'utf8');
+        u = e.match(/DEBUG_SERVER_URL=(.+)/)?.[1] || u;
+        s = e.match(/DEBUG_SESSION_ID=(.+)/)?.[1] || s;
+      } catch {}
+      fetch(u, {
+        method: 'POST',
+        body: JSON.stringify({
+          sessionId: s,
+          runId: 'pre-fix',
+          hypothesisId: 'D',
+          location: 'webhooks/tilda/order:POST',
+          msg: '[DEBUG] Tilda webhook normalized payload',
+          data: {
+            customerPhone: normalizedPayload.customer.phone ?? null,
+            customerEmail: normalizedPayload.customer.email ?? null,
+            itemsCount: normalizedPayload.items.length,
+            totalAmount: normalizedPayload.totalAmount,
+          },
+          ts: Date.now(),
+        }),
+      }).catch(() => {});
+    })();
+    // #endregion
 
     if (isEmptyTildaLeadPayload(normalizedPayload)) {
       return jsonResponse({
@@ -104,10 +134,70 @@ export async function POST(request: Request) {
 
     const lead = await saveTildaLead(normalizedPayload, rawPayload);
     const orderPreview = toCreateOrderPayload(normalizedPayload);
+    // #region debug-point D:order-preview
+    (() => {
+      const p = '.dbg/tilda-maxma-order.env';
+      let u = 'http://127.0.0.1:7777/event';
+      let s = 'tilda-maxma-order';
+      try {
+        const e = readFileSync(p, 'utf8');
+        u = e.match(/DEBUG_SERVER_URL=(.+)/)?.[1] || u;
+        s = e.match(/DEBUG_SESSION_ID=(.+)/)?.[1] || s;
+      } catch {}
+      fetch(u, {
+        method: 'POST',
+        body: JSON.stringify({
+          sessionId: s,
+          runId: 'pre-fix',
+          hypothesisId: 'D',
+          location: 'webhooks/tilda/order:orderPreview',
+          msg: '[DEBUG] Tilda order preview prepared',
+          data: {
+            orderReady: Boolean(orderPreview),
+            leadSaved: lead.saved,
+            leadId: lead.id ?? null,
+          },
+          ts: Date.now(),
+        }),
+      }).catch(() => {});
+    })();
+    // #endregion
     const orderTxid = orderPreview ? buildTildaOrderTxid(rawPayload) : null;
     const order = orderPreview
       ? await createOrder(orderPreview, { txid: orderTxid! })
       : null;
+    // #region debug-point C:tilda-order-result
+    (() => {
+      const p = '.dbg/tilda-maxma-order.env';
+      let u = 'http://127.0.0.1:7777/event';
+      let s = 'tilda-maxma-order';
+      try {
+        const e = readFileSync(p, 'utf8');
+        u = e.match(/DEBUG_SERVER_URL=(.+)/)?.[1] || u;
+        s = e.match(/DEBUG_SESSION_ID=(.+)/)?.[1] || s;
+      } catch {}
+      fetch(u, {
+        method: 'POST',
+        body: JSON.stringify({
+          sessionId: s,
+          runId: 'pre-fix',
+          hypothesisId: 'C',
+          location: 'webhooks/tilda/order:result',
+          msg: '[DEBUG] Tilda webhook order processing result',
+          data: {
+            orderTxid,
+            orderStatus: order && typeof order === 'object' && 'status' in order ? order.status : null,
+            orderAction: order && typeof order === 'object' && 'action' in order ? order.action : null,
+            orderSkipped:
+              order && typeof order === 'object' && 'orderSkipped' in order
+                ? order.orderSkipped
+                : null,
+          },
+          ts: Date.now(),
+        }),
+      }).catch(() => {});
+    })();
+    // #endregion
 
     return jsonResponse({
       status: 'accepted',
