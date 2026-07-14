@@ -130,8 +130,11 @@ export function calculateCheckout(payload: CalculateCheckoutPayload) {
   return calculateCheckoutInMaxma(payload);
 }
 
-export function createOrder(payload: CreateOrderPayload) {
-  return createOrderInMaxma(payload);
+export function createOrder(
+  payload: CreateOrderPayload,
+  options?: { txid?: string },
+) {
+  return createOrderInMaxma(payload, options);
 }
 
 function buildOverrideMeta(payload: SyncCatalogItemPayload) {

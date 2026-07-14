@@ -500,12 +500,15 @@ export function calculateCheckout(payload: CalculateCheckoutPayload) {
   );
 }
 
-export function createOrder(payload: CreateOrderPayload) {
+export function createOrder(
+  payload: CreateOrderPayload,
+  options: { txid?: string } = {},
+) {
   return post(
     getAppConfig().integrations.maxma.orderCreatePath,
     'create-order',
     {
-      txid: `lapaloma-${Date.now()}`,
+      txid: options.txid ?? `lapaloma-${Date.now()}`,
       calculationQuery: buildOrderCalculationQuery(payload),
     },
     { requiresShop: true },

@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
 import { errorResponse, jsonResponse, optionsResponse } from '@/server/http';
 import { saveTildaLead } from '@/server/leads';
+import { createOrder } from '@/server/services';
 import {
   isEmptyTildaLeadPayload,
   normalizeTildaLeadPayload,
@@ -54,6 +56,33 @@ async function readWebhookPayload(request: Request): Promise<unknown> {
   }
 }
 
+function stableSerialize(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableSerialize).join(',')}]`;
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) =>
+      a.localeCompare(b),
+    );
+
+    return `{${entries
+      .map(([key, nestedValue]) => `${JSON.stringify(key)}:${stableSerialize(nestedValue)}`)
+      .join(',')}}`;
+  }
+
+  return JSON.stringify(value);
+}
+
+function buildTildaOrderTxid(rawPayload: unknown) {
+  const fingerprint = createHash('sha256')
+    .update(stableSerialize(rawPayload))
+    .digest('hex')
+    .slice(0, 24);
+
+  return `tilda-${fingerprint}`;
+}
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -75,6 +104,10 @@ export async function POST(request: Request) {
 
     const lead = await saveTildaLead(normalizedPayload, rawPayload);
     const orderPreview = toCreateOrderPayload(normalizedPayload);
+    const orderTxid = orderPreview ? buildTildaOrderTxid(rawPayload) : null;
+    const order = orderPreview
+      ? await createOrder(orderPreview, { txid: orderTxid! })
+      : null;
 
     return jsonResponse({
       status: 'accepted',
@@ -82,9 +115,11 @@ export async function POST(request: Request) {
       mode: 'lead',
       lead,
       orderReady: Boolean(orderPreview),
+      orderTxid,
+      order,
       normalizedPayload,
       message: orderPreview
-        ? 'Заявка из Tilda сохранена. При необходимости ее можно позже переводить в заказ.'
+        ? 'Заявка из Tilda сохранена и сразу отправлена в MAXMA как заказ в работе.'
         : 'Заявка из Tilda сохранена как лид без полного состава заказа.',
     });
   } catch (error) {
