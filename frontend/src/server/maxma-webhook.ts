@@ -4,6 +4,7 @@ import { getAppConfig } from '@/server/config';
 import { isDatabaseConfigured, query } from '@/server/database';
 import type {
   MaxmaWebhookEvent,
+  MaxmaWebhookListItem,
   MaxmaWebhookSaveResult,
 } from '@/types/api';
 
@@ -190,4 +191,55 @@ export async function saveMaxmaWebhookEvents(
   }
 
   return results;
+}
+
+type MaxmaWebhookEventRow = {
+  id: string;
+  event_id: string;
+  event_code: string;
+  event_time: string;
+  source_system: string;
+  event_payload: unknown;
+  received_at: string;
+};
+
+function toMaxmaWebhookListItem(row: MaxmaWebhookEventRow): MaxmaWebhookListItem {
+  return {
+    id: row.id,
+    eventId: row.event_id,
+    event: row.event_code,
+    eventTime: row.event_time,
+    source: row.source_system,
+    payload: row.event_payload,
+    receivedAt: row.received_at,
+  };
+}
+
+export async function listRecentMaxmaWebhookEvents(
+  limit = 20,
+): Promise<MaxmaWebhookListItem[]> {
+  if (!isDatabaseConfigured()) {
+    return [];
+  }
+
+  await ensureMaxmaWebhookEventsTable();
+
+  const rows = await query<MaxmaWebhookEventRow>(
+    `
+      SELECT
+        id,
+        event_id,
+        event_code,
+        event_time,
+        source_system,
+        event_payload,
+        received_at
+      FROM maxma_webhook_events
+      ORDER BY received_at DESC
+      LIMIT $1
+    `,
+    [limit],
+  );
+
+  return rows.map(toMaxmaWebhookListItem);
 }

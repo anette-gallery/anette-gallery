@@ -115,6 +115,16 @@ export type MaxmaWebhookSaveResult = {
   event: string;
 };
 
+export type MaxmaWebhookListItem = {
+  id: string;
+  eventId: string;
+  event: string;
+  eventTime: string;
+  source: string;
+  payload: unknown;
+  receivedAt: string;
+};
+
 export type SyncCatalogItemPayload = {
   sku: string;
   title: string;
