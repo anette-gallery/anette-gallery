@@ -179,6 +179,27 @@ function getPromocodeLabel(result: CheckoutCalculationResponse | null) {
   return [name, value].filter(Boolean).join(' - ') || null;
 }
 
+function getDiscountBreakdown(result: CheckoutCalculationResponse | null) {
+  const firstDiscount =
+    Array.isArray(result?.discounts) && result?.discounts.length > 0
+      ? result.discounts[0]
+      : null;
+
+  if (!isRecord(firstDiscount)) {
+    return {
+      totalDiscount: 0,
+      prepaidAmount: 0,
+    };
+  }
+
+  return {
+    totalDiscount:
+      typeof firstDiscount.totalDiscount === 'number' ? firstDiscount.totalDiscount : 0,
+    prepaidAmount:
+      typeof firstDiscount.prepaidAmount === 'number' ? firstDiscount.prepaidAmount : 0,
+  };
+}
+
 function getCalculationStatusMessage(
   result: CheckoutCalculationResponse | null,
   subtotal: number,
@@ -187,10 +208,11 @@ function getCalculationStatusMessage(
     return null;
   }
 
+  const { totalDiscount, prepaidAmount } = getDiscountBreakdown(result);
   const discountAmount = Math.max(0, subtotal - result.total);
   const hasPromo = Boolean(getPromocodeLabel(result));
   const hasGiftCards = Array.isArray(result.giftCards) && result.giftCards.length > 0;
-  const hasDiscounts = Array.isArray(result.discounts) && result.discounts.length > 0;
+  const hasDiscounts = totalDiscount > 0 || prepaidAmount > 0;
 
   if (discountAmount > 0) {
     return `Скидка применена. Экономия ${formatCurrency(discountAmount)}, итоговая сумма ${formatCurrency(result.total)}.`;
@@ -200,7 +222,7 @@ function getCalculationStatusMessage(
     return `Проверка выполнена. Итоговая сумма: ${formatCurrency(result.total)}.`;
   }
 
-  return `Скидка не найдена. Итоговая сумма без изменений: ${formatCurrency(result.total)}.`;
+  return `Скидка не найдена. MAXMA вернула 0 ₽ скидки и 0 ₽ бонусов, итоговая сумма без изменений: ${formatCurrency(result.total)}.`;
 }
 
 type CheckoutClientProps = {
