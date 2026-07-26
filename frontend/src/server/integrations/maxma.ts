@@ -139,6 +139,7 @@ function buildOrderCalculationQuery(payload: CreateOrderPayload) {
       id: `${index + 1}`,
       product: {
         sku: item.sku,
+        ...(item.title ? { name: item.title } : {}),
         blackPrice: item.unitPrice,
       },
       qty: item.quantity,

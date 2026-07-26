@@ -168,6 +168,7 @@ export async function createOrder(
     fullName: payload.customer.fullName,
     phone: payload.customer.phone,
     email: payload.customer.email,
+    address: payload.customer.address,
     loyaltyCardNumber: payload.loyaltyCardNumber,
   });
   // #region debug-point B:customer-sync-result

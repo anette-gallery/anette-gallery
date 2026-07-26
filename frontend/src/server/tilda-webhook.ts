@@ -154,6 +154,7 @@ function normalizeOrderItem(
 
   return {
     sku: sku || title,
+    title,
     quantity,
     unitPrice,
   };
@@ -198,6 +199,8 @@ function toCreateOrderCandidate(payload: TildaLeadPayload) {
     promoCode: payload.promoCode,
     giftCardNumber: payload.giftCardNumber,
     loyaltyCardNumber: payload.loyaltyCardNumber,
+    deliveryMethod: payload.deliveryMethod,
+    comment: payload.comment,
   };
 }
 

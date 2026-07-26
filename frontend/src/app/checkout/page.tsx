@@ -1,236 +1,150 @@
-'use client';
+import CheckoutClient from './CheckoutClient';
 
-import { FormEvent, useMemo, useState } from 'react';
-import { calculateCheckout } from '@/lib/api';
-import type {
-  CalculateCheckoutPayload,
-  CheckoutCalculationResponse,
-} from '@/types/api';
-import styles from './page.module.css';
+type SearchParamsInput = Record<string, string | string[] | undefined>;
 
-const initialPayload: CalculateCheckoutPayload = {
-  phone: '',
-  promoCode: '',
-  giftCardNumber: '',
-  items: [
-    {
-      sku: 'SKU-001',
-      quantity: 1,
-      price: 5400,
-    },
-  ],
-};
+function readString(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) {
+    return value[0] ?? '';
+  }
 
-export default function CheckoutPage() {
-  const [payload, setPayload] = useState<CalculateCheckoutPayload>(initialPayload);
-  const [result, setResult] = useState<CheckoutCalculationResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  return value ?? '';
+}
 
-  const subtotal = useMemo(
-    () =>
-      payload.items.reduce(
-        (sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0),
-        0,
-      ),
-    [payload.items],
-  );
+function readNumber(value: string | string[] | undefined, fallback: number): number {
+  const rawValue = readString(value).trim();
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setIsLoading(true);
-    setError(null);
+  if (!rawValue) {
+    return fallback;
+  }
 
-    try {
-      const sanitizedPayload: CalculateCheckoutPayload = {
-        phone: payload.phone?.trim() || undefined,
-        promoCode: payload.promoCode?.trim() || undefined,
-        giftCardNumber: payload.giftCardNumber?.trim() || undefined,
-        items: payload.items,
-      };
-      const response = await calculateCheckout(sanitizedPayload);
-      setResult(response);
-    } catch (submitError) {
-      const message =
-        submitError instanceof Error
-          ? submitError.message
-          : 'Не удалось выполнить расчет корзины.';
-      setError(message);
-      setResult(null);
-    } finally {
-      setIsLoading(false);
+  const raw = rawValue.replace(/\s/g, '').replace(',', '.');
+  const parsed = Number(raw);
+
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readItemString(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function readItemNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value.trim().replace(/\s/g, '').replace(',', '.'));
+
+    if (Number.isFinite(parsed)) {
+      return parsed;
     }
   }
 
-  return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <section className={styles.header}>
-          <p className={styles.eyebrow}>Checkout Demo</p>
-          <h1>Тестовая форма расчета корзины</h1>
-          <p className={styles.description}>
-            Страница отправляет данные в Next.js endpoint
-            <code>/api/v1/checkout/calculate</code> и показывает результат серверного
-            расчета.
-          </p>
-        </section>
+  return undefined;
+}
 
-        <div className={styles.layout}>
-          <form className={styles.form} onSubmit={handleSubmit}>
-            <label className={styles.field}>
-              <span>Телефон</span>
-              <input
-                value={payload.phone}
-                onChange={(event) =>
-                  setPayload((current) => ({
-                    ...current,
-                    phone: event.target.value,
-                  }))
-                }
-                placeholder="+79990000000"
-              />
-            </label>
+function normalizeItem(value: unknown, index: number) {
+  if (!isRecord(value)) {
+    return null;
+  }
 
-            <label className={styles.field}>
-              <span>Промокод</span>
-              <input
-                value={payload.promoCode}
-                onChange={(event) =>
-                  setPayload((current) => ({
-                    ...current,
-                    promoCode: event.target.value,
-                  }))
-                }
-                placeholder="SPRING10"
-              />
-            </label>
+  const price = readItemNumber(value.price) ?? 0;
+  const quantity = Math.max(1, Math.trunc(readItemNumber(value.quantity) ?? 1));
 
-            <label className={styles.field}>
-              <span>Подарочная карта</span>
-              <input
-                value={payload.giftCardNumber}
-                onChange={(event) =>
-                  setPayload((current) => ({
-                    ...current,
-                    giftCardNumber: event.target.value,
-                  }))
-                }
-                placeholder="GIFT-001"
-              />
-            </label>
+  return {
+    sku: readItemString(value.sku) ?? `item-${index + 1}`,
+    title:
+      readItemString(value.title) ?? readItemString(value.name) ?? `Товар ${index + 1}`,
+    quantity,
+    price: Math.max(0, price),
+  };
+}
 
-            <div className={styles.items}>
-              <h2>Товар</h2>
+function parseItems(value: string): Array<{
+  sku: string;
+  title?: string;
+  quantity: number;
+  price: number;
+}> {
+  if (!value) {
+    return [];
+  }
 
-              <label className={styles.field}>
-                <span>Артикул</span>
-                <input
-                  value={payload.items[0]?.sku ?? ''}
-                  onChange={(event) =>
-                    setPayload((current) => ({
-                      ...current,
-                      items: [
-                        {
-                          ...current.items[0],
-                          sku: event.target.value,
-                        },
-                      ],
-                    }))
-                  }
-                />
-              </label>
+  try {
+    const parsed = JSON.parse(value);
 
-              <div className={styles.row}>
-                <label className={styles.field}>
-                  <span>Количество</span>
-                  <input
-                    type="number"
-                    min="1"
-                    value={payload.items[0]?.quantity ?? 1}
-                    onChange={(event) =>
-                      setPayload((current) => ({
-                        ...current,
-                        items: [
-                          {
-                            ...current.items[0],
-                            quantity: Number(event.target.value),
-                          },
-                        ],
-                      }))
-                    }
-                  />
-                </label>
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
 
-                <label className={styles.field}>
-                  <span>Цена</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={payload.items[0]?.price ?? 0}
-                    onChange={(event) =>
-                      setPayload((current) => ({
-                        ...current,
-                        items: [
-                          {
-                            ...current.items[0],
-                            price: Number(event.target.value),
-                          },
-                        ],
-                      }))
-                    }
-                  />
-                </label>
-              </div>
-            </div>
+    return parsed.map(normalizeItem).filter(Boolean) as Array<{
+      sku: string;
+      title?: string;
+      quantity: number;
+      price: number;
+    }>;
+  } catch {
+    return [];
+  }
+}
 
-            <div className={styles.summary}>
-              <span>Локальный subtotal</span>
-              <strong>{subtotal.toFixed(2)} RUB</strong>
-            </div>
+function buildInitialForm(searchParams: SearchParamsInput) {
+  const cartItems = parseItems(readString(searchParams.cart));
+  const paramItems = parseItems(readString(searchParams.items));
+  const items = cartItems.length > 0 ? cartItems : paramItems;
 
-            <button className={styles.submit} type="submit" disabled={isLoading}>
-              {isLoading ? 'Считаем...' : 'Рассчитать в API'}
-            </button>
+  return {
+    customer: {
+      fullName: readString(searchParams.fullName) || readString(searchParams.name),
+      phone: readString(searchParams.phone),
+      email: readString(searchParams.email),
+      address: readString(searchParams.address),
+      city: readString(searchParams.city),
+      street: readString(searchParams.street),
+      house: readString(searchParams.house),
+      apartment:
+        readString(searchParams.apartment) || readString(searchParams.flat),
+      intercom: readString(searchParams.intercom),
+    },
+    deliveryMethod: readString(searchParams.delivery) || 'courier',
+    loyaltyCardNumber:
+      readString(searchParams.loyaltyCardNumber) || readString(searchParams.card),
+    promoCode: readString(searchParams.promoCode) || readString(searchParams.promo),
+    giftCardNumber:
+      readString(searchParams.giftCardNumber) ||
+      readString(searchParams.giftCard) ||
+      readString(searchParams.certificate),
+    comment: readString(searchParams.comment),
+    consentAccepted: true,
+    items:
+      items.length > 0
+        ? items
+        : [
+            {
+              sku: readString(searchParams.sku) || 'SKU-001',
+              title: readString(searchParams.title) || 'Ваза Rose Royal',
+              quantity: Math.max(1, Math.trunc(readNumber(searchParams.quantity, 1))),
+              price: Math.max(0, readNumber(searchParams.price, 3828000)),
+            },
+          ],
+  };
+}
 
-            {error ? <p className={styles.error}>{error}</p> : null}
-          </form>
+export default async function CheckoutPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParamsInput>;
+}) {
+  const resolvedSearchParams = await searchParams;
 
-          <aside className={styles.result}>
-            <h2>Ответ API</h2>
-            {result ? (
-              <>
-                <div className={styles.resultGrid}>
-                  <div>
-                    <span>Статус</span>
-                    <strong>{result.status}</strong>
-                  </div>
-                  <div>
-                    <span>Action</span>
-                    <strong>{result.action}</strong>
-                  </div>
-                  <div>
-                    <span>Subtotal</span>
-                    <strong>{result.subtotal.toFixed(2)} RUB</strong>
-                  </div>
-                  <div>
-                    <span>Total</span>
-                    <strong>{result.total.toFixed(2)} RUB</strong>
-                  </div>
-                </div>
-
-                <pre className={styles.code}>
-                  {JSON.stringify(result, null, 2)}
-                </pre>
-              </>
-            ) : (
-              <p className={styles.placeholder}>
-                После отправки формы здесь появится результат расчета корзины.
-              </p>
-            )}
-          </aside>
-        </div>
-      </main>
-    </div>
-  );
+  return <CheckoutClient initialForm={buildInitialForm(resolvedSearchParams)} />;
 }

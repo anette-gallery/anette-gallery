@@ -156,6 +156,10 @@ function parseCheckoutItem(value: unknown, index: number) {
 
   return {
     sku: expectString(value.sku, `items[${index}].sku`, { maxLength: 64 })!,
+    title: expectString(value.title, `items[${index}].title`, {
+      optional: true,
+      maxLength: 255,
+    }),
     quantity: expectNumber(value.quantity, `items[${index}].quantity`, {
       min: 1,
       integer: true,
@@ -258,6 +262,10 @@ function parseOrderCustomer(value: unknown): OrderCustomer {
       optional: true,
       maxLength: 255,
     }),
+    address: expectString(value.address, 'customer.address', {
+      optional: true,
+      maxLength: 500,
+    }),
   };
 }
 
@@ -268,6 +276,10 @@ function parseOrderItem(value: unknown, index: number): OrderItem {
 
   return {
     sku: expectString(value.sku, `items[${index}].sku`, { maxLength: 64 })!,
+    title: expectString(value.title, `items[${index}].title`, {
+      optional: true,
+      maxLength: 255,
+    }),
     quantity: expectNumber(value.quantity, `items[${index}].quantity`, {
       min: 1,
       integer: true,
@@ -302,6 +314,14 @@ export function parseCreateOrderPayload(input: unknown): CreateOrderPayload {
     loyaltyCardNumber: expectString(input.loyaltyCardNumber, 'loyaltyCardNumber', {
       optional: true,
       maxLength: 64,
+    }),
+    deliveryMethod: expectString(input.deliveryMethod, 'deliveryMethod', {
+      optional: true,
+      maxLength: 120,
+    }),
+    comment: expectString(input.comment, 'comment', {
+      optional: true,
+      maxLength: 1000,
     }),
   };
 }

@@ -1,6 +1,7 @@
 import type {
   CalculateCheckoutPayload,
   CheckoutCalculationResponse,
+  CreateOrderPayload,
 } from '@/types/api';
 
 const API_BASE_URL =
@@ -26,6 +27,13 @@ async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
 
 export function calculateCheckout(payload: CalculateCheckoutPayload) {
   return apiRequest<CheckoutCalculationResponse>('/checkout/calculate', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createOrder(payload: CreateOrderPayload) {
+  return apiRequest<Record<string, unknown>>('/orders', {
     method: 'POST',
     body: JSON.stringify(payload),
   });

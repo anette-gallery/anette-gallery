@@ -2,6 +2,7 @@ export type IntegrationMode = 'stub' | 'live';
 
 export type CheckoutItemInput = {
   sku: string;
+  title?: string;
   quantity: number;
   price: number;
 };
@@ -27,6 +28,9 @@ export type CheckoutCalculationResponse = {
   loyalty?: Record<string, unknown>;
   fallbackPolicy?: Record<string, unknown>;
   display?: Record<string, unknown>;
+  promocode?: Record<string, unknown>;
+  giftCards?: unknown[];
+  rawResponse?: unknown;
 };
 
 export type SyncCustomerPayload = {
@@ -41,10 +45,12 @@ export type OrderCustomer = {
   fullName: string;
   phone: string;
   email?: string;
+  address?: string;
 };
 
 export type OrderItem = {
   sku: string;
+  title?: string;
   quantity: number;
   unitPrice: number;
 };
@@ -56,6 +62,8 @@ export type CreateOrderPayload = {
   promoCode?: string;
   giftCardNumber?: string;
   loyaltyCardNumber?: string;
+  deliveryMethod?: string;
+  comment?: string;
 };
 
 export type TildaLeadCustomer = {
