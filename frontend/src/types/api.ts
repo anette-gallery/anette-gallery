@@ -3,6 +3,7 @@ export type IntegrationMode = 'stub' | 'live';
 export type CheckoutItemInput = {
   sku: string;
   title?: string;
+  image?: string;
   quantity: number;
   price: number;
 };
@@ -51,6 +52,7 @@ export type OrderCustomer = {
 export type OrderItem = {
   sku: string;
   title?: string;
+  image?: string;
   quantity: number;
   unitPrice: number;
 };

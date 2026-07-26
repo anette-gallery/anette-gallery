@@ -45,6 +45,15 @@
       ('item-' + (index + 1));
     var quantity = toQuantity(item.quantity || item.qty || item.count || 1);
     var price = toNumber(item.price || item.amount || item.sum || item.cost || 0);
+    var image =
+      item.image ||
+      item.img ||
+      item.photo ||
+      item.picture ||
+      item.pic ||
+      item.imageUrl ||
+      item.image_url ||
+      '';
 
     if (!title || price < 0) {
       return null;
@@ -53,6 +62,7 @@
     return {
       sku: String(sku).trim(),
       title: String(title).trim(),
+      image: image ? String(image).trim() : undefined,
       quantity: quantity,
       price: price,
     };
@@ -147,6 +157,15 @@
       var quantity = toQuantity(
         textContent(node, ['.t706__product-quantity', '.t706__cartwin-prodquantity'])
       );
+      var imageNode = node.querySelector(
+        'img.t706__product-img, img.t706__cartwin-prodimg, img, [data-original], [data-img-zoom-url]'
+      );
+      var image =
+        (imageNode &&
+          (imageNode.getAttribute('src') ||
+            imageNode.getAttribute('data-original') ||
+            imageNode.getAttribute('data-img-zoom-url'))) ||
+        '';
       var linePrice = toNumber(
         textContent(node, [
           '.t706__cartwin-prodamount-price',
@@ -159,6 +178,7 @@
         {
           sku: sku,
           title: title || ('Товар ' + (index + 1)),
+          image: image,
           quantity: quantity,
           price: quantity > 1 ? linePrice / quantity : linePrice,
         },

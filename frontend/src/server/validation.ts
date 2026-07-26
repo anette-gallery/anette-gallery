@@ -160,6 +160,10 @@ function parseCheckoutItem(value: unknown, index: number) {
       optional: true,
       maxLength: 255,
     }),
+    image: expectString(value.image, `items[${index}].image`, {
+      optional: true,
+      maxLength: 2048,
+    }),
     quantity: expectNumber(value.quantity, `items[${index}].quantity`, {
       min: 1,
       integer: true,
@@ -279,6 +283,10 @@ function parseOrderItem(value: unknown, index: number): OrderItem {
     title: expectString(value.title, `items[${index}].title`, {
       optional: true,
       maxLength: 255,
+    }),
+    image: expectString(value.image, `items[${index}].image`, {
+      optional: true,
+      maxLength: 2048,
     }),
     quantity: expectNumber(value.quantity, `items[${index}].quantity`, {
       min: 1,

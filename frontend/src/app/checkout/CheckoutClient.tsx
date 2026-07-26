@@ -216,6 +216,7 @@ function buildCalculationPayload(form: CheckoutFormState): CalculateCheckoutPayl
     items: form.items.map((item) => ({
       sku: item.sku.trim(),
       title: item.title?.trim() || undefined,
+      image: item.image?.trim() || undefined,
       quantity: Math.max(1, Math.trunc(item.quantity || 1)),
       price: Math.max(0, Number(item.price || 0)),
     })),
@@ -242,6 +243,7 @@ function buildOrderPayload(
     items: form.items.map((item) => ({
       sku: item.sku.trim(),
       title: item.title?.trim() || undefined,
+      image: item.image?.trim() || undefined,
       quantity: Math.max(1, Math.trunc(item.quantity || 1)),
       unitPrice: Math.max(0, Number(item.price || 0)),
     })),
@@ -795,7 +797,12 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
               {form.items.map((item, index) => (
                 <article key={`${item.sku}-${index}`} className={styles.productRow}>
                   <div className={styles.productThumb}>
-                    {item.title?.slice(0, 1).toUpperCase() ?? 'A'}
+                    {item.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={item.image} alt={item.title ?? 'Товар'} />
+                    ) : (
+                      item.title?.slice(0, 1).toUpperCase() ?? 'A'
+                    )}
                   </div>
 
                   <div className={styles.productInfo}>

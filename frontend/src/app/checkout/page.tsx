@@ -64,6 +64,10 @@ function normalizeItem(value: unknown, index: number) {
     sku: readItemString(value.sku) ?? `item-${index + 1}`,
     title:
       readItemString(value.title) ?? readItemString(value.name) ?? `Товар ${index + 1}`,
+    image:
+      readItemString(value.image) ??
+      readItemString(value.img) ??
+      readItemString(value.photo),
     quantity,
     price: Math.max(0, price),
   };
@@ -132,6 +136,7 @@ function buildInitialForm(searchParams: SearchParamsInput) {
             {
               sku: readString(searchParams.sku) || 'SKU-001',
               title: readString(searchParams.title) || 'Ваза Rose Royal',
+              image: readString(searchParams.image) || undefined,
               quantity: Math.max(1, Math.trunc(readNumber(searchParams.quantity, 1))),
               price: Math.max(0, readNumber(searchParams.price, 3828000)),
             },
