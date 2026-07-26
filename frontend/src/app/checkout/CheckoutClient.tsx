@@ -1,7 +1,7 @@
 'use client';
 
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { calculateCheckout, createOrder } from '@/lib/api';
 import type {
   CalculateCheckoutPayload,
@@ -42,6 +42,8 @@ const PICKUP_DETAILS = {
   hours: 'Время работы: Ежедневно с 11 до 21',
   phones: 'Телефоны: +7 (495) 222-18-91, +7 (985) 222-18-91',
 };
+
+const CHECKOUT_PROFILE_KEY = 'lapaloma_checkout_profile_v1';
 
 export type CheckoutFormState = {
   customer: {
@@ -91,6 +93,91 @@ function getDeliveryOption(value: string) {
   return (
     DELIVERY_OPTIONS.find((option) => option.value === value) ?? DELIVERY_OPTIONS[0]
   );
+}
+
+function isCustomerProfile(value: unknown): value is CheckoutFormState['customer'] {
+  return isRecord(value);
+}
+
+function readStoredProfile(): Partial<CheckoutFormState> | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(CHECKOUT_PROFILE_KEY);
+
+    if (!rawValue) {
+      return null;
+    }
+
+    const parsed = JSON.parse(rawValue);
+
+    if (!isRecord(parsed)) {
+      return null;
+    }
+
+    return {
+      customer: isCustomerProfile(parsed.customer)
+        ? {
+            fullName: readString(parsed.customer.fullName) ?? '',
+            phone: readString(parsed.customer.phone) ?? '',
+            email: readString(parsed.customer.email) ?? '',
+            address: readString(parsed.customer.address) ?? '',
+            city: readString(parsed.customer.city) ?? '',
+            street: readString(parsed.customer.street) ?? '',
+            house: readString(parsed.customer.house) ?? '',
+            apartment: readString(parsed.customer.apartment) ?? '',
+            intercom: readString(parsed.customer.intercom) ?? '',
+          }
+        : undefined,
+      deliveryMethod: readString(parsed.deliveryMethod),
+      loyaltyCardNumber: readString(parsed.loyaltyCardNumber),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function mergeStoredProfile(
+  form: CheckoutFormState,
+  storedProfile: Partial<CheckoutFormState> | null,
+): CheckoutFormState {
+  if (!storedProfile) {
+    return form;
+  }
+
+  const storedCustomer = storedProfile.customer;
+
+  return {
+    ...form,
+    customer: {
+      fullName: form.customer.fullName || storedCustomer?.fullName || '',
+      phone: form.customer.phone || storedCustomer?.phone || '',
+      email: form.customer.email || storedCustomer?.email || '',
+      address: form.customer.address || storedCustomer?.address || '',
+      city: form.customer.city || storedCustomer?.city || '',
+      street: form.customer.street || storedCustomer?.street || '',
+      house: form.customer.house || storedCustomer?.house || '',
+      apartment: form.customer.apartment || storedCustomer?.apartment || '',
+      intercom: form.customer.intercom || storedCustomer?.intercom || '',
+    },
+    deliveryMethod:
+      form.deliveryMethod !== DELIVERY_OPTIONS[0].value
+        ? form.deliveryMethod
+        : storedProfile.deliveryMethod || form.deliveryMethod,
+    loyaltyCardNumber: form.loyaltyCardNumber || storedProfile.loyaltyCardNumber || '',
+  };
+}
+
+function buildStoredProfile(form: CheckoutFormState) {
+  return {
+    customer: {
+      ...form.customer,
+    },
+    deliveryMethod: form.deliveryMethod,
+    loyaltyCardNumber: form.loyaltyCardNumber.trim(),
+  };
 }
 
 function buildAddress(customer: CheckoutFormState['customer']) {
@@ -230,7 +317,9 @@ type CheckoutClientProps = {
 };
 
 export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
-  const [form, setForm] = useState<CheckoutFormState>(initialForm);
+  const [form, setForm] = useState<CheckoutFormState>(() =>
+    mergeStoredProfile(initialForm, readStoredProfile()),
+  );
   const [calculation, setCalculation] = useState<CheckoutCalculationResponse | null>(null);
   const [orderResponse, setOrderResponse] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -260,6 +349,19 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
   const deliveryOption = getDeliveryOption(form.deliveryMethod);
   const addressSummary =
     buildAddress(form.customer) ?? 'Россия, Москва';
+  const storedProfileJson = useMemo(() => JSON.stringify(buildStoredProfile(form)), [form]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(CHECKOUT_PROFILE_KEY, storedProfileJson);
+    } catch {
+      // ignore storage errors in private mode
+    }
+  }, [storedProfileJson]);
 
   function updateItemQuantity(index: number, quantity: number) {
     setForm((current) => ({

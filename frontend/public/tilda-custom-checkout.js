@@ -183,6 +183,321 @@
     return '';
   }
 
+  function normalizeSpaces(value) {
+    return String(value || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function looksLikeEmail(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeSpaces(value));
+  }
+
+  function looksLikePhone(value) {
+    return /^\+?\d[\d\s()-]{8,}$/.test(normalizeSpaces(value));
+  }
+
+  function looksLikeName(value) {
+    var normalized = normalizeSpaces(value);
+    return normalized.length >= 3 && /[a-zа-яё]/i.test(normalized);
+  }
+
+  function getByPath(source, path) {
+    var current = source;
+
+    for (var i = 0; i < path.length; i += 1) {
+      if (!current || typeof current !== 'object' || !(path[i] in current)) {
+        return '';
+      }
+
+      current = current[path[i]];
+    }
+
+    return current;
+  }
+
+  function findNestedValue(source, keys, validator, depth) {
+    if (!source || typeof source !== 'object' || depth > 4) {
+      return '';
+    }
+
+    var sourceKeys = Object.keys(source);
+
+    for (var i = 0; i < sourceKeys.length; i += 1) {
+      var key = sourceKeys[i];
+      var normalizedKey = key.toLowerCase();
+      var value = source[key];
+
+      if (keys.indexOf(normalizedKey) !== -1 && typeof value === 'string') {
+        var normalizedValue = normalizeSpaces(value);
+
+        if (validator(normalizedValue)) {
+          return normalizedValue;
+        }
+      }
+
+      if (value && typeof value === 'object') {
+        var nestedValue = findNestedValue(value, keys, validator, depth + 1);
+
+        if (nestedValue) {
+          return nestedValue;
+        }
+      }
+    }
+
+    return '';
+  }
+
+  function readProfileFromDom() {
+    var name = textContent(document, [
+      '.profile-name',
+      '[data-member-name]',
+      '[data-profile-name]',
+      '.t-account__name',
+      '.t-auth__name',
+      '.js-member-name',
+    ]);
+    var email = textContent(document, [
+      '.profile-login',
+      '[data-member-email]',
+      '[data-profile-email]',
+      '.t-account__email',
+      '.js-member-email',
+    ]);
+    var phone = textContent(document, [
+      '.profile-phone',
+      '[data-member-phone]',
+      '[data-profile-phone]',
+      '.t-account__phone',
+      '.js-member-phone',
+    ]);
+
+    if (!email) {
+      var emailLink = document.querySelector('a[href^="mailto:"]');
+      email = emailLink
+        ? normalizeSpaces((emailLink.getAttribute('href') || '').replace(/^mailto:/i, ''))
+        : '';
+    }
+
+    if (!phone) {
+      var phoneLink = document.querySelector('a[href^="tel:"]');
+      phone = phoneLink
+        ? normalizeSpaces((phoneLink.getAttribute('href') || '').replace(/^tel:/i, ''))
+        : '';
+    }
+
+    return {
+      name: looksLikeName(name) ? name : '',
+      email: looksLikeEmail(email) ? email : '',
+      phone: looksLikePhone(phone) ? phone : '',
+    };
+  }
+
+  function readProfileFromWindow() {
+    var sources = [
+      window.__TildaMembers,
+      window.__TildaMember,
+      window.__TildaProfile,
+      window.tildaMember,
+      window.tildaMembers,
+      window.tildaUser,
+      window.currentUser,
+      window.currentMember,
+      window.__member,
+      window.__user,
+    ];
+    var keyPaths = [
+      ['user'],
+      ['member'],
+      ['profile'],
+      ['profile', 'user'],
+      ['profile', 'member'],
+      ['customer'],
+      ['data'],
+    ];
+    var candidates = [];
+
+    for (var i = 0; i < sources.length; i += 1) {
+      if (sources[i] && typeof sources[i] === 'object') {
+        candidates.push(sources[i]);
+
+        for (var j = 0; j < keyPaths.length; j += 1) {
+          var nested = getByPath(sources[i], keyPaths[j]);
+
+          if (nested && typeof nested === 'object') {
+            candidates.push(nested);
+          }
+        }
+      }
+    }
+
+    var result = {
+      name: '',
+      email: '',
+      phone: '',
+    };
+
+    for (var k = 0; k < candidates.length; k += 1) {
+      var candidate = candidates[k];
+
+      if (!result.name) {
+        result.name = findNestedValue(
+          candidate,
+          ['name', 'fullname', 'full_name', 'fio', 'username', 'displayname'],
+          looksLikeName,
+          0
+        );
+      }
+
+      if (!result.email) {
+        result.email = findNestedValue(
+          candidate,
+          ['email', 'login', 'mail'],
+          looksLikeEmail,
+          0
+        );
+      }
+
+      if (!result.phone) {
+        result.phone = findNestedValue(
+          candidate,
+          ['phone', 'phonenumber', 'phone_number', 'tel', 'telephone', 'mobile'],
+          looksLikePhone,
+          0
+        );
+      }
+    }
+
+    return result;
+  }
+
+  function readProfileFromStorageArea(storage) {
+    var keys = [];
+
+    try {
+      for (var i = 0; i < storage.length; i += 1) {
+        var key = storage.key(i);
+
+        if (key && /(member|profile|user|account|customer|cabinet|lk)/i.test(key)) {
+          keys.push(key);
+        }
+      }
+    } catch {
+      keys = [];
+    }
+
+    var result = {
+      name: '',
+      email: '',
+      phone: '',
+    };
+
+    for (var j = 0; j < keys.length; j += 1) {
+      var rawValue = null;
+
+      try {
+        rawValue = storage.getItem(keys[j]);
+      } catch {
+        rawValue = null;
+      }
+
+      if (!rawValue) {
+        continue;
+      }
+
+      var parsedValue = null;
+
+      try {
+        parsedValue = JSON.parse(rawValue);
+      } catch {
+        parsedValue = null;
+      }
+
+      if (!parsedValue || typeof parsedValue !== 'object') {
+        continue;
+      }
+
+      if (!result.name) {
+        result.name = findNestedValue(
+          parsedValue,
+          ['name', 'fullname', 'full_name', 'fio', 'username', 'displayname'],
+          looksLikeName,
+          0
+        );
+      }
+
+      if (!result.email) {
+        result.email = findNestedValue(
+          parsedValue,
+          ['email', 'login', 'mail'],
+          looksLikeEmail,
+          0
+        );
+      }
+
+      if (!result.phone) {
+        result.phone = findNestedValue(
+          parsedValue,
+          ['phone', 'phonenumber', 'phone_number', 'tel', 'telephone', 'mobile'],
+          looksLikePhone,
+          0
+        );
+      }
+    }
+
+    return result;
+  }
+
+  function readProfileFields() {
+    var directFields = {
+      name: readField([
+        'input[name="name"]',
+        'input[name="Name"]',
+        'input[name="fio"]',
+        'input[name="fullName"]',
+      ]),
+      phone: readField([
+        'input[name="phone"]',
+        'input[name="tel"]',
+        'input[name="telephone"]',
+        'input[type="tel"]',
+      ]),
+      email: readField([
+        'input[name="email"]',
+        'input[type="email"]',
+      ]),
+    };
+    var domProfile = readProfileFromDom();
+    var windowProfile = readProfileFromWindow();
+    var storageProfile = readProfileFromStorageArea(window.localStorage);
+    var sessionProfile = readProfileFromStorageArea(window.sessionStorage);
+
+    return {
+      name:
+        directFields.name ||
+        domProfile.name ||
+        windowProfile.name ||
+        storageProfile.name ||
+        sessionProfile.name,
+      phone:
+        directFields.phone ||
+        domProfile.phone ||
+        windowProfile.phone ||
+        storageProfile.phone ||
+        sessionProfile.phone,
+      email:
+        directFields.email ||
+        domProfile.email ||
+        windowProfile.email ||
+        storageProfile.email ||
+        sessionProfile.email,
+      comment: readField([
+        'textarea[name="comment"]',
+        'textarea[name="message"]',
+      ]),
+    };
+  }
+
   function buildCheckoutUrl() {
     var items = tryReadWindowCart();
 
@@ -201,28 +516,7 @@
     var url = new URL(CHECKOUT_URL, window.location.origin);
     url.searchParams.set('items', JSON.stringify(items));
 
-    var fields = {
-      name: readField([
-        'input[name="name"]',
-        'input[name="Name"]',
-        'input[name="fio"]',
-        'input[name="fullName"]',
-      ]),
-      phone: readField([
-        'input[name="phone"]',
-        'input[name="tel"]',
-        'input[name="telephone"]',
-        'input[type="tel"]',
-      ]),
-      email: readField([
-        'input[name="email"]',
-        'input[type="email"]',
-      ]),
-      comment: readField([
-        'textarea[name="comment"]',
-        'textarea[name="message"]',
-      ]),
-    };
+    var fields = readProfileFields();
 
     Object.keys(fields).forEach(function (key) {
       if (fields[key]) {
