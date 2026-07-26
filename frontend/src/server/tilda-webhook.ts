@@ -125,14 +125,17 @@ function normalizeOrderItem(
     `Tilda item ${index + 1}`;
   const sku =
     getStringValue(lookup, [
-      'sku',
       'article',
       'articul',
       'vendorcode',
+      'vendor_code',
       'externalid',
       'external_id',
       'offerid',
+      'offer_id',
+      'sku',
       'variantid',
+      'uid',
       'id',
     ]) ?? `tilda-item-${index + 1}`;
   const quantity = Math.max(

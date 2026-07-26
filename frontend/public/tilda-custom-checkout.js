@@ -37,10 +37,16 @@
 
     var title = item.title || item.name || item.product || ('Товар ' + (index + 1));
     var sku =
-      item.sku ||
-      item.uid ||
       item.art ||
       item.article ||
+      item.vendorCode ||
+      item.vendor_code ||
+      item.externalId ||
+      item.external_id ||
+      item.offerId ||
+      item.offerid ||
+      item.sku ||
+      item.uid ||
       item.variant ||
       ('item-' + (index + 1));
     var quantity = toQuantity(item.quantity || item.qty || item.count || 1);
@@ -150,8 +156,12 @@
         '.js-product-name',
       ]);
       var sku =
+        node.getAttribute('data-product-article') ||
+        node.getAttribute('data-product-articul') ||
+        node.getAttribute('data-product-externalid') ||
         node.getAttribute('data-product-sku') ||
         node.getAttribute('data-sku') ||
+        node.getAttribute('data-product-uid') ||
         node.getAttribute('data-product-lid') ||
         ('item-' + (index + 1));
       var quantity = toQuantity(

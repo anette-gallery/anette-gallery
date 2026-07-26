@@ -348,6 +348,7 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     hasStaleCalculation || !calculation ? subtotal : calculation.total;
   const orderStatus =
     typeof orderResponse?.status === 'string' ? orderResponse.status : null;
+  const isOrderSuccessful = orderStatus === 'ok';
   const deliveryOption = getDeliveryOption(form.deliveryMethod);
   const addressSummary =
     buildAddress(form.customer) ?? 'Россия, Москва';
@@ -851,11 +852,8 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
                 <strong>Итоговая сумма: {formatCurrency(total)}</strong>
               </div>
 
-              {orderStatus ? (
-                <div className={styles.responseBox}>
-                  <p className={styles.responseStatus}>Статус: {orderStatus}</p>
-                  <pre>{JSON.stringify(orderResponse, null, 2)}</pre>
-                </div>
+              {isOrderSuccessful ? (
+                <p className={styles.successText}>Заказ отправлен</p>
               ) : null}
             </div>
           </aside>

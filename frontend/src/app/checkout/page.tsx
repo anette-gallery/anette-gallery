@@ -61,7 +61,17 @@ function normalizeItem(value: unknown, index: number) {
   const quantity = Math.max(1, Math.trunc(readItemNumber(value.quantity) ?? 1));
 
   return {
-    sku: readItemString(value.sku) ?? `item-${index + 1}`,
+    sku:
+      readItemString(value.article) ??
+      readItemString(value.art) ??
+      readItemString(value.vendorCode) ??
+      readItemString(value.vendor_code) ??
+      readItemString(value.externalId) ??
+      readItemString(value.external_id) ??
+      readItemString(value.offerId) ??
+      readItemString(value.offerid) ??
+      readItemString(value.sku) ??
+      `item-${index + 1}`,
     title:
       readItemString(value.title) ?? readItemString(value.name) ?? `Товар ${index + 1}`,
     image:
