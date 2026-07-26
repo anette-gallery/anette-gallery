@@ -110,6 +110,31 @@ export type LeadListItem = {
   createdAt: string;
 };
 
+export type OrderRequestSaveResult = {
+  saved: boolean;
+  id?: string;
+  source: string;
+  status: string;
+  reason?: string;
+};
+
+export type OrderRequestListItem = {
+  id: string;
+  sourceChannel: string;
+  status: string;
+  fullName?: string;
+  phone?: string;
+  email?: string;
+  totalAmount: number;
+  itemsCount: number;
+  deliveryMethod?: string;
+  comment?: string;
+  rawPayload: unknown;
+  responsePayload: unknown;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type MaxmaWebhookEvent = {
   event: string;
   eventId: string;

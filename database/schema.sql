@@ -103,6 +103,23 @@ CREATE TABLE lead_requests (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE order_requests (
+  id UUID PRIMARY KEY,
+  source_channel VARCHAR(32) NOT NULL DEFAULT 'custom-checkout',
+  status VARCHAR(32) NOT NULL DEFAULT 'received',
+  full_name VARCHAR(255),
+  phone VARCHAR(32),
+  email VARCHAR(255),
+  total_amount NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  items_count INT NOT NULL DEFAULT 0,
+  delivery_method VARCHAR(255),
+  comment TEXT,
+  raw_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  response_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE maxma_webhook_events (
   id UUID PRIMARY KEY,
   event_id VARCHAR(128) NOT NULL UNIQUE,
@@ -133,6 +150,8 @@ CREATE INDEX idx_product_images_product_id ON product_images(product_id);
 CREATE INDEX idx_integrations_log_system_name ON integrations_log(system_name);
 CREATE INDEX idx_lead_requests_source_system ON lead_requests(source_system);
 CREATE INDEX idx_lead_requests_created_at ON lead_requests(created_at DESC);
+CREATE INDEX idx_order_requests_created_at ON order_requests(created_at DESC);
+CREATE INDEX idx_order_requests_phone ON order_requests(phone);
 CREATE INDEX idx_maxma_webhook_events_event_code ON maxma_webhook_events(event_code);
 CREATE INDEX idx_maxma_webhook_events_received_at ON maxma_webhook_events(received_at DESC);
 CREATE INDEX idx_sync_queue_status ON sync_queue(status);
