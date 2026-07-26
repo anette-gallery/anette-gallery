@@ -266,6 +266,13 @@
   line-height: 1.5;
 }
 
+.calculationMessage {
+  margin: 12px 0 0;
+  color: #666666;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
 .consentRow {
   display: flex;
   align-items: flex-start;

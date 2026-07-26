@@ -84,7 +84,7 @@
 
       try {
         raw = window.localStorage.getItem(keys[i]) || window.sessionStorage.getItem(keys[i]);
-      } catch (error) {
+      } catch {
         raw = null;
       }
 
@@ -99,7 +99,7 @@
         if (Array.isArray(products) && products.length > 0) {
           return products.map(normalizeItem).filter(Boolean);
         }
-      } catch (error) {
+      } catch {
         // ignore malformed storage payload
       }
     }

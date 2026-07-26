@@ -179,6 +179,30 @@ function getPromocodeLabel(result: CheckoutCalculationResponse | null) {
   return [name, value].filter(Boolean).join(' - ') || null;
 }
 
+function getCalculationStatusMessage(
+  result: CheckoutCalculationResponse | null,
+  subtotal: number,
+) {
+  if (!result) {
+    return null;
+  }
+
+  const discountAmount = Math.max(0, subtotal - result.total);
+  const hasPromo = Boolean(getPromocodeLabel(result));
+  const hasGiftCards = Array.isArray(result.giftCards) && result.giftCards.length > 0;
+  const hasDiscounts = Array.isArray(result.discounts) && result.discounts.length > 0;
+
+  if (discountAmount > 0) {
+    return `Скидка применена. Экономия ${formatCurrency(discountAmount)}, итоговая сумма ${formatCurrency(result.total)}.`;
+  }
+
+  if (hasPromo || hasGiftCards || hasDiscounts) {
+    return `Проверка выполнена. Итоговая сумма: ${formatCurrency(result.total)}.`;
+  }
+
+  return `Скидка не найдена. Итоговая сумма без изменений: ${formatCurrency(result.total)}.`;
+}
+
 type CheckoutClientProps = {
   initialForm: CheckoutFormState;
 };
@@ -206,13 +230,30 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
       ),
     [form.items],
   );
-  const total = calculation?.total ?? subtotal;
   const hasStaleCalculation = Boolean(calculation) && lastCalculatedKey !== calculationKey;
+  const total =
+    hasStaleCalculation || !calculation ? subtotal : calculation.total;
   const orderStatus =
     typeof orderResponse?.status === 'string' ? orderResponse.status : null;
   const deliveryOption = getDeliveryOption(form.deliveryMethod);
   const addressSummary =
     buildAddress(form.customer) ?? 'Россия, Москва';
+
+  function updateItemQuantity(index: number, quantity: number) {
+    setForm((current) => ({
+      ...current,
+      items: current.items.map((currentItem, currentIndex) =>
+        currentIndex === index
+          ? {
+              ...currentItem,
+              quantity: Math.max(1, quantity),
+            }
+          : currentItem,
+      ),
+    }));
+    setOrderResponse(null);
+    setOrderError(null);
+  }
 
   async function runCalculation(
     payload: CalculateCheckoutPayload,
@@ -560,6 +601,12 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
                   <span className={styles.mutedText}>Цена изменена, пересчитайте заказ</span>
                 ) : null}
               </div>
+
+              {!hasStaleCalculation && getCalculationStatusMessage(calculation, subtotal) ? (
+                <p className={styles.calculationMessage}>
+                  {getCalculationStatusMessage(calculation, subtotal)}
+                </p>
+              ) : null}
             </section>
 
             <section className={styles.formSection}>
@@ -649,38 +696,14 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
                     <div className={styles.qtyBox}>
                       <button
                         type="button"
-                        onClick={() =>
-                          setForm((current) => ({
-                            ...current,
-                            items: current.items.map((currentItem, currentIndex) =>
-                              currentIndex === index
-                                ? {
-                                    ...currentItem,
-                                    quantity: Math.max(1, currentItem.quantity - 1),
-                                  }
-                                : currentItem,
-                            ),
-                          }))
-                        }
+                        onClick={() => updateItemQuantity(index, item.quantity - 1)}
                       >
                         -
                       </button>
                       <span>{item.quantity}</span>
                       <button
                         type="button"
-                        onClick={() =>
-                          setForm((current) => ({
-                            ...current,
-                            items: current.items.map((currentItem, currentIndex) =>
-                              currentIndex === index
-                                ? {
-                                    ...currentItem,
-                                    quantity: currentItem.quantity + 1,
-                                  }
-                                : currentItem,
-                            ),
-                          }))
-                        }
+                        onClick={() => updateItemQuantity(index, item.quantity + 1)}
                       >
                         +
                       </button>
