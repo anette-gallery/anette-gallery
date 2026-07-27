@@ -459,6 +459,9 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     () => normalizePhone(form.customer.phone),
     [form.customer.phone],
   );
+  const hasManualDiscountInput = Boolean(
+    normalizeDiscountCode(form.promoCode) || normalizeDiscountCode(form.giftCardNumber),
+  );
   const registerInLoyaltyProgram =
     Boolean(loyaltyRegistrationPhone) && loyaltyRegistrationPhone === normalizedPhone;
   const calculationPayload = useMemo(
@@ -509,6 +512,7 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
       !hadKnownCustomerAtStart ||
       autoCalculatedLoyaltyRef.current ||
       !isPhoneReady(form.customer.phone) ||
+        hasManualDiscountInput ||
       isCalculating ||
       isSubmitting
     ) {
@@ -551,6 +555,7 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     };
   }, [
     form,
+      hasManualDiscountInput,
     hadKnownCustomerAtStart,
     isCalculating,
     isSubmitting,

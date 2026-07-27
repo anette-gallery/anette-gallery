@@ -6,6 +6,8 @@ import type {
   SyncCustomerPayload,
 } from '@/types/api';
 
+const MAXMA_REQUEST_TIMEOUT_MS = 12000;
+
 function isLiveEnabled(path: string | null): boolean {
   const config = getAppConfig();
 
@@ -212,17 +214,37 @@ async function post(
 
   const config = getAppConfig();
   const url = buildUrl(path ?? '/');
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Accept-Language': 'ru',
-      'Content-Type': 'application/json',
-      'X-Processing-Key': config.integrations.maxma.apiKey!,
-    },
-    body: JSON.stringify(payload),
-    cache: 'no-store',
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, MAXMA_REQUEST_TIMEOUT_MS);
+
+  let response: Response;
+
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Accept-Language': 'ru',
+        'Content-Type': 'application/json',
+        'X-Processing-Key': config.integrations.maxma.apiKey!,
+      },
+      body: JSON.stringify(payload),
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+  } catch (error) {
+    clearTimeout(timeoutId);
+
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('MAXMA долго отвечает');
+    }
+
+    throw error;
+  }
+
+  clearTimeout(timeoutId);
   const responseText = await response.text();
   let responseBody: unknown = responseText;
 
