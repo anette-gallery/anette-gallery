@@ -1,8 +1,13 @@
 'use client';
 
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
-import { calculateCheckout, createOrder } from '@/lib/api';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  calculateCheckout,
+  createOrder,
+  validateGiftCard,
+  validatePromoCode,
+} from '@/lib/api';
 import type {
   CalculateCheckoutPayload,
   CheckoutCalculationResponse,
@@ -87,6 +92,18 @@ function readString(value: unknown): string | undefined {
 
 function formatCurrency(value: number) {
   return currencyFormatter.format(value).replace(/\s/g, ' ');
+}
+
+function normalizePhone(phone: string) {
+  return phone.replace(/\D/g, '');
+}
+
+function isPhoneReady(phone: string) {
+  return normalizePhone(phone).length >= 10;
+}
+
+function normalizeDiscountCode(value: string) {
+  return value.trim().toUpperCase();
 }
 
 function getDeliveryOption(value: string) {
@@ -208,11 +225,15 @@ function buildOrderComment(form: CheckoutFormState) {
   return commentParts.filter(Boolean).join('. ') || undefined;
 }
 
-function buildCalculationPayload(form: CheckoutFormState): CalculateCheckoutPayload {
+function buildCalculationPayload(
+  form: CheckoutFormState,
+  options: { registerInLoyaltyProgram?: boolean } = {},
+): CalculateCheckoutPayload {
   return {
     phone: form.customer.phone.trim() || undefined,
-    promoCode: form.promoCode.trim() || undefined,
-    giftCardNumber: form.giftCardNumber.trim() || undefined,
+    promoCode: normalizeDiscountCode(form.promoCode) || undefined,
+    giftCardNumber: normalizeDiscountCode(form.giftCardNumber) || undefined,
+    registerInLoyaltyProgram: options.registerInLoyaltyProgram || undefined,
     items: form.items.map((item) => ({
       sku: item.sku.trim(),
       title: item.title?.trim() || undefined,
@@ -236,8 +257,8 @@ function buildOrderPayload(
     },
     deliveryMethod: getDeliveryOption(form.deliveryMethod).summary,
     loyaltyCardNumber: form.loyaltyCardNumber.trim() || undefined,
-    promoCode: form.promoCode.trim() || undefined,
-    giftCardNumber: form.giftCardNumber.trim() || undefined,
+    promoCode: normalizeDiscountCode(form.promoCode) || undefined,
+    giftCardNumber: normalizeDiscountCode(form.giftCardNumber) || undefined,
     comment: buildOrderComment(form),
     totalAmount,
     items: form.items.map((item) => ({
@@ -302,16 +323,74 @@ function getCalculationStatusMessage(
   const hasPromo = Boolean(getPromocodeLabel(result));
   const hasGiftCards = Array.isArray(result.giftCards) && result.giftCards.length > 0;
   const hasDiscounts = totalDiscount > 0 || prepaidAmount > 0;
+  const hasRegisteredInLoyalty = Boolean(result.payload.registerInLoyaltyProgram);
 
   if (discountAmount > 0) {
-    return `Скидка применена. Экономия ${formatCurrency(discountAmount)}, итоговая сумма ${formatCurrency(result.total)}.`;
+    return hasRegisteredInLoyalty
+      ? `Скидка программы лояльности применена. Экономия ${formatCurrency(discountAmount)}, итоговая сумма ${formatCurrency(result.total)}.`
+      : `Скидка применена. Экономия ${formatCurrency(discountAmount)}, итоговая сумма ${formatCurrency(result.total)}.`;
   }
 
   if (hasPromo || hasGiftCards || hasDiscounts) {
     return `Проверка выполнена. Итоговая сумма: ${formatCurrency(result.total)}.`;
   }
 
+  if (hasRegisteredInLoyalty) {
+    return `Регистрация в программе лояльности отправлена. Сейчас итоговая сумма: ${formatCurrency(result.total)}.`;
+  }
+
   return `Скидка не найдена. MAXMA вернула 0 ₽ скидки и 0 ₽ бонусов, итоговая сумма без изменений: ${formatCurrency(result.total)}.`;
+}
+
+function shouldOfferLoyaltyRegistration(
+  result: CheckoutCalculationResponse | null,
+  subtotal: number,
+) {
+  if (!result || !isPhoneReady(result.payload.phone ?? '')) {
+    return false;
+  }
+
+  if (result.payload.registerInLoyaltyProgram) {
+    return false;
+  }
+
+  const { totalDiscount, prepaidAmount } = getDiscountBreakdown(result);
+  const discountAmount = Math.max(0, subtotal - result.total);
+  const hasPromo = Boolean(getPromocodeLabel(result));
+  const hasGiftCards = Array.isArray(result.giftCards) && result.giftCards.length > 0;
+  const loyalty = isRecord(result.loyalty) ? result.loyalty : null;
+
+  if (loyalty?.suggestRegistration === true) {
+    return true;
+  }
+
+  return (
+    discountAmount <= 0 &&
+    totalDiscount <= 0 &&
+    prepaidAmount <= 0 &&
+    !hasPromo &&
+    !hasGiftCards
+  );
+}
+
+function hasPromoMatch(result: CheckoutCalculationResponse | null) {
+  if (!result) {
+    return false;
+  }
+
+  return Boolean(getPromocodeLabel(result));
+}
+
+function hasGiftCardMatch(result: CheckoutCalculationResponse | null) {
+  if (!result) {
+    return false;
+  }
+
+  const { prepaidAmount } = getDiscountBreakdown(result);
+  return (
+    prepaidAmount > 0 ||
+    (Array.isArray(result.giftCards) && result.giftCards.length > 0)
+  );
 }
 
 type CheckoutClientProps = {
@@ -329,8 +408,25 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
   const [isCalculating, setIsCalculating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastCalculatedKey, setLastCalculatedKey] = useState<string>('');
+  const [loyaltyRegistrationPhone, setLoyaltyRegistrationPhone] = useState<string | null>(
+    null,
+  );
+  const [hadKnownCustomerAtStart] = useState(() => {
+    const mergedForm = mergeStoredProfile(initialForm, readStoredProfile());
+    return isPhoneReady(mergedForm.customer.phone);
+  });
+  const autoCalculatedLoyaltyRef = useRef(false);
 
-  const calculationPayload = useMemo(() => buildCalculationPayload(form), [form]);
+  const normalizedPhone = useMemo(
+    () => normalizePhone(form.customer.phone),
+    [form.customer.phone],
+  );
+  const registerInLoyaltyProgram =
+    Boolean(loyaltyRegistrationPhone) && loyaltyRegistrationPhone === normalizedPhone;
+  const calculationPayload = useMemo(
+    () => buildCalculationPayload(form, { registerInLoyaltyProgram }),
+    [form, registerInLoyaltyProgram],
+  );
   const calculationKey = useMemo(
     () => JSON.stringify(calculationPayload),
     [calculationPayload],
@@ -353,6 +449,8 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
   const addressSummary =
     buildAddress(form.customer) ?? 'Россия, Москва';
   const storedProfileJson = useMemo(() => JSON.stringify(buildStoredProfile(form)), [form]);
+  const canOfferLoyaltyRegistration =
+    !hasStaleCalculation && shouldOfferLoyaltyRegistration(calculation, subtotal);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -365,6 +463,56 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
       // ignore storage errors in private mode
     }
   }, [storedProfileJson]);
+
+  useEffect(() => {
+    if (
+      !hadKnownCustomerAtStart ||
+      autoCalculatedLoyaltyRef.current ||
+      !isPhoneReady(form.customer.phone) ||
+      isCalculating ||
+      isSubmitting
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    autoCalculatedLoyaltyRef.current = true;
+
+    const runAutoCalculation = async () => {
+      setIsCalculating(true);
+      setOrderError(null);
+
+      try {
+        await runCalculation(buildCalculationPayload(form));
+      } catch (submitError) {
+        if (cancelled) {
+          return;
+        }
+
+        const message =
+          submitError instanceof Error
+            ? submitError.message
+            : 'Не удалось автоматически проверить скидку.';
+        setError(message);
+        setCalculation(null);
+      } finally {
+        if (!cancelled) {
+          setIsCalculating(false);
+        }
+      }
+    };
+
+    void runAutoCalculation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    form,
+    hadKnownCustomerAtStart,
+    isCalculating,
+    isSubmitting,
+  ]);
 
   function updateItemQuantity(index: number, quantity: number) {
     setForm((current) => ({
@@ -397,17 +545,142 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     return response;
   }
 
+  async function resolveDiscountFields(currentForm: CheckoutFormState) {
+    const promoCode = normalizeDiscountCode(currentForm.promoCode);
+    const giftCardNumber = normalizeDiscountCode(currentForm.giftCardNumber);
+
+    const buildLookupPayload = (codes: {
+      promoCode?: string;
+      giftCardNumber?: string;
+    }) => ({
+      ...buildCalculationPayload(
+        {
+          ...currentForm,
+          promoCode: codes.promoCode ?? '',
+          giftCardNumber: codes.giftCardNumber ?? '',
+        },
+        { registerInLoyaltyProgram: false },
+      ),
+      phone: undefined,
+    });
+
+    let resolvedPromoCode = promoCode;
+    let resolvedGiftCardNumber = giftCardNumber;
+
+    if (promoCode && giftCardNumber && promoCode === giftCardNumber) {
+      const promoResult = await validatePromoCode(
+        buildLookupPayload({ promoCode, giftCardNumber: '' }),
+      );
+
+      if (hasPromoMatch(promoResult)) {
+        resolvedGiftCardNumber = '';
+      } else {
+        const giftResult = await validateGiftCard(
+          buildLookupPayload({ promoCode: '', giftCardNumber }),
+        );
+
+        if (hasGiftCardMatch(giftResult)) {
+          resolvedPromoCode = '';
+        } else {
+          resolvedGiftCardNumber = '';
+        }
+      }
+    } else {
+      if (promoCode) {
+        const promoResult = await validatePromoCode(
+          buildLookupPayload({ promoCode, giftCardNumber: '' }),
+        );
+
+        if (!hasPromoMatch(promoResult)) {
+          const giftFallbackResult = await validateGiftCard(
+            buildLookupPayload({ promoCode: '', giftCardNumber: promoCode }),
+          );
+
+          if (hasGiftCardMatch(giftFallbackResult)) {
+            resolvedPromoCode = '';
+            resolvedGiftCardNumber = promoCode;
+          }
+        }
+      }
+
+      if (giftCardNumber) {
+        const giftResult = await validateGiftCard(
+          buildLookupPayload({ promoCode: '', giftCardNumber }),
+        );
+
+        if (!hasGiftCardMatch(giftResult)) {
+          const promoFallbackResult = await validatePromoCode(
+            buildLookupPayload({ promoCode: giftCardNumber, giftCardNumber: '' }),
+          );
+
+          if (hasPromoMatch(promoFallbackResult)) {
+            resolvedPromoCode = giftCardNumber;
+            resolvedGiftCardNumber = '';
+          }
+        }
+      }
+    }
+
+    return {
+      ...currentForm,
+      promoCode: resolvedPromoCode,
+      giftCardNumber: resolvedGiftCardNumber,
+    };
+  }
+
   async function handleRecalculate() {
     setIsCalculating(true);
     setOrderError(null);
+    setError(null);
 
     try {
-      await runCalculation(calculationPayload);
+      const resolvedForm = await resolveDiscountFields(form);
+
+      if (
+        resolvedForm.promoCode !== form.promoCode ||
+        resolvedForm.giftCardNumber !== form.giftCardNumber
+      ) {
+        setForm(resolvedForm);
+      }
+
+      await runCalculation(
+        buildCalculationPayload(resolvedForm, { registerInLoyaltyProgram }),
+      );
     } catch (submitError) {
       const message =
         submitError instanceof Error
           ? submitError.message
           : 'Не удалось пересчитать заказ.';
+      setError(message);
+      setCalculation(null);
+    } finally {
+      setIsCalculating(false);
+    }
+  }
+
+  async function handleLoyaltyRegistration() {
+    if (!isPhoneReady(form.customer.phone)) {
+      setError('Для регистрации в программе лояльности укажите телефон.');
+      return;
+    }
+
+    setIsCalculating(true);
+    setOrderError(null);
+    setError(null);
+
+    try {
+      setLoyaltyRegistrationPhone(normalizedPhone);
+      await runCalculation(
+        buildCalculationPayload(form, {
+          registerInLoyaltyProgram: true,
+        }),
+      );
+    } catch (submitError) {
+      setLoyaltyRegistrationPhone(null);
+      const message =
+        submitError instanceof Error
+          ? submitError.message
+          : 'Не удалось подключить программу лояльности.';
       setError(message);
       setCalculation(null);
     } finally {
@@ -422,10 +695,24 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     setError(null);
 
     try {
-      const latestCalculation = await runCalculation(calculationPayload, {
-        persistError: false,
-      });
-      const response = await createOrder(buildOrderPayload(form, latestCalculation.total));
+      const resolvedForm = await resolveDiscountFields(form);
+
+      if (
+        resolvedForm.promoCode !== form.promoCode ||
+        resolvedForm.giftCardNumber !== form.giftCardNumber
+      ) {
+        setForm(resolvedForm);
+      }
+
+      const latestCalculation = await runCalculation(
+        buildCalculationPayload(resolvedForm, { registerInLoyaltyProgram }),
+        {
+          persistError: false,
+        },
+      );
+      const response = await createOrder(
+        buildOrderPayload(resolvedForm, latestCalculation.total),
+      );
 
       setOrderResponse(response);
 
@@ -729,11 +1016,37 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
                 ) : null}
               </div>
 
+                {hadKnownCustomerAtStart && !calculation && !error ? (
+                  <p className={styles.noteText}>
+                    Скидку для вашего профиля проверяем автоматически.
+                  </p>
+                ) : null}
+
               {!hasStaleCalculation && getCalculationStatusMessage(calculation, subtotal) ? (
                 <p className={styles.calculationMessage}>
                   {getCalculationStatusMessage(calculation, subtotal)}
                 </p>
               ) : null}
+
+                {canOfferLoyaltyRegistration ? (
+                  <div className={styles.loyaltyCard}>
+                    <p className={styles.loyaltyTitle}>Программа лояльности</p>
+                    <p className={styles.loyaltyText}>
+                      Если система еще не нашла ваш профиль, зарегистрируйтесь перед
+                      оплатой. После этого корзина пересчитается автоматически.
+                    </p>
+                    <button
+                      className={styles.lightButton}
+                      type="button"
+                      onClick={handleLoyaltyRegistration}
+                      disabled={isCalculating || isSubmitting}
+                    >
+                      {registerInLoyaltyProgram && isCalculating
+                        ? 'Подключаем...'
+                        : 'Зарегистрироваться и пересчитать'}
+                    </button>
+                  </div>
+                ) : null}
             </section>
 
             <section className={styles.formSection}>

@@ -96,14 +96,14 @@ function buildCompatibility(payload: CalculateCheckoutPayload) {
     hasUnsupportedCombination: hasLoyalty && hasPromo,
     discountPriority: 'discount-then-gift-card',
     message: hasLoyalty && hasPromo
-      ? 'Карта лояльности и промокод не суммируются'
+      ? 'Промокод имеет приоритет. Скидка лояльности с ним не суммируется'
       : 'Комбинация скидок допустима по текущим согласованным правилам',
   };
 }
 
 function buildCalculationQuery(payload: CalculateCheckoutPayload) {
   return {
-    ...(payload.phone
+    ...(!payload.promoCode && payload.phone
       ? {
           client: {
             phoneNumber: normalizePhone(payload.phone),
@@ -127,7 +127,7 @@ function buildCalculationQuery(payload: CalculateCheckoutPayload) {
 
 function buildOrderCalculationQuery(payload: CreateOrderPayload) {
   return {
-    ...(payload.customer.phone
+    ...(!payload.promoCode && payload.customer.phone
       ? {
           client: {
             phoneNumber: normalizePhone(payload.customer.phone),

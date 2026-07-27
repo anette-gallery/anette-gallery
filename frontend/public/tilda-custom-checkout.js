@@ -7,6 +7,9 @@
     (script && script.dataset && script.dataset.buttonText) ||
     'Оформить заказ';
   var BRIDGE_ATTR = 'data-custom-checkout-bound';
+  var CART_ROOT_SELECTOR = '.t706__cartwin, .t706, .t-store__cart, .t-popup, .t228__cart, .js-store-cart';
+  var CART_ACTION_SELECTOR =
+    'button, a, input[type="submit"], input[type="button"], [role="button"], .t706__cartwin-proceed, .t706__orderform-btn, .js-store-order, .js-cart-order, .js-tcart-checkout';
 
   function toNumber(value) {
     if (typeof value === 'number' && Number.isFinite(value)) {
@@ -574,19 +577,40 @@
     window.location.href = targetUrl;
   }
 
+  function findCartActionNode(node) {
+    if (!node || node.nodeType !== 1) {
+      return null;
+    }
+
+    if (typeof node.closest === 'function') {
+      return node.closest(CART_ACTION_SELECTOR);
+    }
+
+    return null;
+  }
+
   function isCartButton(node) {
     if (!node || node.nodeType !== 1) {
       return false;
     }
 
     var text = ((node.textContent || node.value || '') + '').toLowerCase();
-    var inCartPopup = !!node.closest('.t706__cartwin, .t706, .t-store__cart, .t-popup');
+    var href = ((node.getAttribute && node.getAttribute('href')) || '').toLowerCase();
+    var className =
+      typeof node.className === 'string'
+        ? node.className.toLowerCase()
+        : '';
+    var inCartPopup = !!node.closest(CART_ROOT_SELECTOR);
+    var looksLikeCheckoutAction =
+      /оформ|заказ|checkout|order/.test(text) ||
+      /checkout|order|cart/.test(href) ||
+      /order|checkout|cart/.test(className);
 
-    return inCartPopup && /оформ|заказ|checkout|order/.test(text);
+    return inCartPopup && looksLikeCheckoutAction;
   }
 
   function bindCartButtons() {
-    var nodes = document.querySelectorAll('button, a, input[type="submit"]');
+    var nodes = document.querySelectorAll(CART_ACTION_SELECTOR);
 
     Array.prototype.forEach.call(nodes, function (node) {
       if (!isCartButton(node) || node.getAttribute(BRIDGE_ATTR) === '1') {
@@ -605,7 +629,33 @@
     });
   }
 
+  function handleDocumentClick(event) {
+    var actionNode = findCartActionNode(event.target);
+
+    if (!isCartButton(actionNode)) {
+      return;
+    }
+
+    openCustomCheckout(event);
+  }
+
+  function handleDocumentSubmit(event) {
+    var form = event.target;
+
+    if (!form || form.nodeType !== 1 || typeof form.closest !== 'function') {
+      return;
+    }
+
+    if (!form.closest(CART_ROOT_SELECTOR)) {
+      return;
+    }
+
+    openCustomCheckout(event);
+  }
+
   bindCartButtons();
+  document.addEventListener('click', handleDocumentClick, true);
+  document.addEventListener('submit', handleDocumentSubmit, true);
 
   var observer = new MutationObserver(function () {
     bindCartButtons();

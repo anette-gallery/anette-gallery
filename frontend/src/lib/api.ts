@@ -32,6 +32,20 @@ export function calculateCheckout(payload: CalculateCheckoutPayload) {
   });
 }
 
+export function validatePromoCode(payload: CalculateCheckoutPayload) {
+  return apiRequest<CheckoutCalculationResponse>('/checkout/promo-code/validate', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function validateGiftCard(payload: CalculateCheckoutPayload) {
+  return apiRequest<CheckoutCalculationResponse>('/checkout/gift-card/validate', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function createOrder(payload: CreateOrderPayload) {
   return apiRequest<Record<string, unknown>>('/orders', {
     method: 'POST',
