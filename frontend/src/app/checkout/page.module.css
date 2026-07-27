@@ -285,7 +285,8 @@
 }
 
 .acceptedBadgeTitle,
-.acceptedBadgeText {
+.acceptedBadgeText,
+.acceptedBadgeMeta {
   margin: 0;
 }
 
@@ -299,6 +300,12 @@
   color: #2d6b45;
   font-size: 14px;
   line-height: 1.5;
+}
+
+.acceptedBadgeMeta {
+  color: #4e7c5f;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .loyaltyCard {

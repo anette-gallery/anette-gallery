@@ -393,6 +393,44 @@ function hasGiftCardMatch(result: CheckoutCalculationResponse | null) {
   );
 }
 
+function getCalculationSourceMessage(
+  result: CheckoutCalculationResponse | null,
+  subtotal: number,
+) {
+  if (!result) {
+    return null;
+  }
+
+  const { totalDiscount, prepaidAmount } = getDiscountBreakdown(result);
+  const discountAmount = Math.max(0, subtotal - result.total);
+  const promoLabel = getPromocodeLabel(result);
+  const hasPromo = Boolean(promoLabel);
+  const hasGiftCards = Array.isArray(result.giftCards) && result.giftCards.length > 0;
+  const hasClientDiscount =
+    !hasPromo &&
+    !hasGiftCards &&
+    (Boolean(result.payload.registerInLoyaltyProgram) ||
+      Boolean(result.payload.phone && (discountAmount > 0 || totalDiscount > 0)));
+
+  if (hasPromo && hasGiftCards) {
+    return 'Источник скидки: промокод и сертификат';
+  }
+
+  if (hasPromo) {
+    return `Источник скидки: промокод${promoLabel ? ` (${promoLabel})` : ''}`;
+  }
+
+  if (hasGiftCards || prepaidAmount > 0) {
+    return 'Источник скидки: сертификат';
+  }
+
+  if (hasClientDiscount) {
+    return 'Источник скидки: скидка клиента';
+  }
+
+  return null;
+}
+
 function getAcceptedCalculationMessage(
   result: CheckoutCalculationResponse | null,
   subtotal: number,
@@ -403,26 +441,35 @@ function getAcceptedCalculationMessage(
 
   const { totalDiscount, prepaidAmount } = getDiscountBreakdown(result);
   const discountAmount = Math.max(0, subtotal - result.total);
-  const hasPromo = Boolean(getPromocodeLabel(result));
+  const promoLabel = getPromocodeLabel(result);
+  const hasPromo = Boolean(promoLabel);
   const hasGiftCards = Array.isArray(result.giftCards) && result.giftCards.length > 0;
-  const hasRegisteredInLoyalty = Boolean(result.payload.registerInLoyaltyProgram);
+  const hasClientDiscount =
+    !hasPromo &&
+    !hasGiftCards &&
+    (Boolean(result.payload.registerInLoyaltyProgram) ||
+      Boolean(result.payload.phone && (discountAmount > 0 || totalDiscount > 0)));
 
   if (hasPromo && hasGiftCards) {
-    return 'Принято: промокод и сертификат применились';
+    return 'Промокод и сертификат применились';
   }
 
   if (hasPromo) {
-    return 'Принято: промокод применился';
+    return promoLabel
+      ? `Промокод ${promoLabel} применился`
+      : 'Промокод применился';
   }
 
   if (hasGiftCards || prepaidAmount > 0) {
-    return 'Принято: сертификат применился';
+    return 'Сертификат применился';
+  }
+
+  if (hasClientDiscount) {
+    return 'Скидка клиента применилась';
   }
 
   if (discountAmount > 0 || totalDiscount > 0) {
-    return hasRegisteredInLoyalty
-      ? 'Принято: скидка лояльности применилась'
-      : 'Принято: скидка применилась';
+    return 'Скидка применилась';
   }
 
   return null;
@@ -454,6 +501,7 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     return isPhoneReady(mergedForm.customer.phone);
   });
   const autoCalculatedLoyaltyRef = useRef(false);
+  const calculationRequestIdRef = useRef(0);
 
   const normalizedPhone = useMemo(
     () => normalizePhone(form.customer.phone),
@@ -494,6 +542,8 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     !hasStaleCalculation && shouldOfferLoyaltyRegistration(calculation, subtotal);
   const acceptedCalculationMessage =
     !hasStaleCalculation ? getAcceptedCalculationMessage(calculation, subtotal) : null;
+  const calculationSourceMessage =
+    !hasStaleCalculation ? getCalculationSourceMessage(calculation, subtotal) : null;
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -555,7 +605,7 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     };
   }, [
     form,
-      hasManualDiscountInput,
+    hasManualDiscountInput,
     hadKnownCustomerAtStart,
     isCalculating,
     isSubmitting,
@@ -581,7 +631,13 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     payload: CalculateCheckoutPayload,
     options: { persistError?: boolean } = {},
   ) {
+    const requestId = ++calculationRequestIdRef.current;
     const response = await calculateCheckout(payload);
+
+    if (requestId !== calculationRequestIdRef.current) {
+      return response;
+    }
+
     setCalculation(response);
     setLastCalculatedKey(JSON.stringify(payload));
 
@@ -590,6 +646,29 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     }
 
     return response;
+  }
+
+  function stopAutoProfileCalculation() {
+    calculationRequestIdRef.current += 1;
+    setIsCalculating(false);
+    setCalculationProgressLabel(null);
+  }
+
+  function handleManualDiscountFieldChange(
+    field: 'promoCode' | 'giftCardNumber',
+    value: string,
+  ) {
+    stopAutoProfileCalculation();
+    setCalculation(null);
+    setLastCalculatedKey('');
+    setOrderResponse(null);
+    setOrderError(null);
+    setError(null);
+
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
   }
 
   async function resolveDiscountFields(currentForm: CheckoutFormState) {
@@ -1021,12 +1100,9 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
                 <label className={styles.lineField}>
                   <input
                     value={form.promoCode}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        promoCode: event.target.value,
-                      }))
-                    }
+                      onChange={(event) =>
+                        handleManualDiscountFieldChange('promoCode', event.target.value)
+                      }
                     placeholder="Введите промокод"
                   />
                 </label>
@@ -1034,12 +1110,9 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
                 <label className={styles.lineField}>
                   <input
                     value={form.giftCardNumber}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        giftCardNumber: event.target.value,
-                      }))
-                    }
+                      onChange={(event) =>
+                        handleManualDiscountFieldChange('giftCardNumber', event.target.value)
+                      }
                     placeholder="Номер сертификата"
                   />
                 </label>
@@ -1091,6 +1164,9 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
                   <div className={styles.acceptedBadge}>
                     <p className={styles.acceptedBadgeTitle}>Принято</p>
                     <p className={styles.acceptedBadgeText}>{acceptedCalculationMessage}</p>
+                    {calculationSourceMessage ? (
+                      <p className={styles.acceptedBadgeMeta}>{calculationSourceMessage}</p>
+                    ) : null}
                   </div>
                 ) : null}
 
