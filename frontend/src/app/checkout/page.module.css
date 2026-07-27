@@ -273,6 +273,34 @@
   line-height: 1.5;
 }
 
+.acceptedBadge {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px solid #b9e5c7;
+  border-radius: 12px;
+  background: #eefaf1;
+}
+
+.acceptedBadgeTitle,
+.acceptedBadgeText {
+  margin: 0;
+}
+
+.acceptedBadgeTitle {
+  color: #18864b;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.acceptedBadgeText {
+  color: #2d6b45;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
 .loyaltyCard {
   display: flex;
   flex-direction: column;

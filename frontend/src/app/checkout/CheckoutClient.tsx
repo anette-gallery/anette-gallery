@@ -393,6 +393,41 @@ function hasGiftCardMatch(result: CheckoutCalculationResponse | null) {
   );
 }
 
+function getAcceptedCalculationMessage(
+  result: CheckoutCalculationResponse | null,
+  subtotal: number,
+) {
+  if (!result) {
+    return null;
+  }
+
+  const { totalDiscount, prepaidAmount } = getDiscountBreakdown(result);
+  const discountAmount = Math.max(0, subtotal - result.total);
+  const hasPromo = Boolean(getPromocodeLabel(result));
+  const hasGiftCards = Array.isArray(result.giftCards) && result.giftCards.length > 0;
+  const hasRegisteredInLoyalty = Boolean(result.payload.registerInLoyaltyProgram);
+
+  if (hasPromo && hasGiftCards) {
+    return 'Принято: промокод и сертификат применились';
+  }
+
+  if (hasPromo) {
+    return 'Принято: промокод применился';
+  }
+
+  if (hasGiftCards || prepaidAmount > 0) {
+    return 'Принято: сертификат применился';
+  }
+
+  if (discountAmount > 0 || totalDiscount > 0) {
+    return hasRegisteredInLoyalty
+      ? 'Принято: скидка лояльности применилась'
+      : 'Принято: скидка применилась';
+  }
+
+  return null;
+}
+
 type CheckoutClientProps = {
   initialForm: CheckoutFormState;
 };
@@ -408,6 +443,9 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
   const [isCalculating, setIsCalculating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastCalculatedKey, setLastCalculatedKey] = useState<string>('');
+  const [calculationProgressLabel, setCalculationProgressLabel] = useState<string | null>(
+    null,
+  );
   const [loyaltyRegistrationPhone, setLoyaltyRegistrationPhone] = useState<string | null>(
     null,
   );
@@ -451,6 +489,8 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
   const storedProfileJson = useMemo(() => JSON.stringify(buildStoredProfile(form)), [form]);
   const canOfferLoyaltyRegistration =
     !hasStaleCalculation && shouldOfferLoyaltyRegistration(calculation, subtotal);
+  const acceptedCalculationMessage =
+    !hasStaleCalculation ? getAcceptedCalculationMessage(calculation, subtotal) : null;
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -483,6 +523,7 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
       setOrderError(null);
 
       try {
+        setCalculationProgressLabel('Проверяем скидку для вашего профиля...');
         await runCalculation(buildCalculationPayload(form));
       } catch (submitError) {
         if (cancelled) {
@@ -498,6 +539,7 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
       } finally {
         if (!cancelled) {
           setIsCalculating(false);
+          setCalculationProgressLabel(null);
         }
       }
     };
@@ -568,6 +610,7 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     let resolvedGiftCardNumber = giftCardNumber;
 
     if (promoCode && giftCardNumber && promoCode === giftCardNumber) {
+      setCalculationProgressLabel('Проверяем промокод...');
       const promoResult = await validatePromoCode(
         buildLookupPayload({ promoCode, giftCardNumber: '' }),
       );
@@ -575,6 +618,7 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
       if (hasPromoMatch(promoResult)) {
         resolvedGiftCardNumber = '';
       } else {
+        setCalculationProgressLabel('Проверяем сертификат...');
         const giftResult = await validateGiftCard(
           buildLookupPayload({ promoCode: '', giftCardNumber }),
         );
@@ -587,11 +631,13 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
       }
     } else {
       if (promoCode) {
+        setCalculationProgressLabel('Проверяем промокод...');
         const promoResult = await validatePromoCode(
           buildLookupPayload({ promoCode, giftCardNumber: '' }),
         );
 
         if (!hasPromoMatch(promoResult)) {
+          setCalculationProgressLabel('Проверяем, не является ли код сертификатом...');
           const giftFallbackResult = await validateGiftCard(
             buildLookupPayload({ promoCode: '', giftCardNumber: promoCode }),
           );
@@ -604,11 +650,13 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
       }
 
       if (giftCardNumber) {
+        setCalculationProgressLabel('Проверяем сертификат...');
         const giftResult = await validateGiftCard(
           buildLookupPayload({ promoCode: '', giftCardNumber }),
         );
 
         if (!hasGiftCardMatch(giftResult)) {
+          setCalculationProgressLabel('Проверяем, не является ли код промокодом...');
           const promoFallbackResult = await validatePromoCode(
             buildLookupPayload({ promoCode: giftCardNumber, giftCardNumber: '' }),
           );
@@ -632,6 +680,7 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     setIsCalculating(true);
     setOrderError(null);
     setError(null);
+    setCalculationProgressLabel('Подготавливаем проверку...');
 
     try {
       const resolvedForm = await resolveDiscountFields(form);
@@ -655,6 +704,7 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
       setCalculation(null);
     } finally {
       setIsCalculating(false);
+      setCalculationProgressLabel(null);
     }
   }
 
@@ -667,6 +717,7 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     setIsCalculating(true);
     setOrderError(null);
     setError(null);
+    setCalculationProgressLabel('Подключаем программу лояльности...');
 
     try {
       setLoyaltyRegistrationPhone(normalizedPhone);
@@ -685,6 +736,7 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
       setCalculation(null);
     } finally {
       setIsCalculating(false);
+      setCalculationProgressLabel(null);
     }
   }
 
@@ -1008,7 +1060,9 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
                   onClick={handleRecalculate}
                   disabled={isCalculating || isSubmitting}
                 >
-                  {isCalculating ? 'Проверяем...' : 'Проверить скидку'}
+                    {isCalculating
+                      ? calculationProgressLabel || 'Проверяем...'
+                      : 'Проверить скидку'}
                 </button>
 
                 {hasStaleCalculation ? (
@@ -1027,6 +1081,13 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
                   {getCalculationStatusMessage(calculation, subtotal)}
                 </p>
               ) : null}
+
+                {!hasStaleCalculation && acceptedCalculationMessage ? (
+                  <div className={styles.acceptedBadge}>
+                    <p className={styles.acceptedBadgeTitle}>Принято</p>
+                    <p className={styles.acceptedBadgeText}>{acceptedCalculationMessage}</p>
+                  </div>
+                ) : null}
 
                 {canOfferLoyaltyRegistration ? (
                   <div className={styles.loyaltyCard}>
