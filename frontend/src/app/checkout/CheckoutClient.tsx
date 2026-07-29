@@ -5,8 +5,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   calculateCheckout,
   createOrder,
-  validateGiftCard,
-  validatePromoCode,
 } from '@/lib/api';
 import type {
   CalculateCheckoutPayload,
@@ -373,26 +371,6 @@ function shouldOfferLoyaltyRegistration(
   );
 }
 
-function hasPromoMatch(result: CheckoutCalculationResponse | null) {
-  if (!result) {
-    return false;
-  }
-
-  return Boolean(getPromocodeLabel(result));
-}
-
-function hasGiftCardMatch(result: CheckoutCalculationResponse | null) {
-  if (!result) {
-    return false;
-  }
-
-  const { prepaidAmount } = getDiscountBreakdown(result);
-  return (
-    prepaidAmount > 0 ||
-    (Array.isArray(result.giftCards) && result.giftCards.length > 0)
-  );
-}
-
 function getCalculationSourceMessage(
   result: CheckoutCalculationResponse | null,
   subtotal: number,
@@ -675,88 +653,10 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     const promoCode = normalizeDiscountCode(currentForm.promoCode);
     const giftCardNumber = normalizeDiscountCode(currentForm.giftCardNumber);
 
-    const buildLookupPayload = (codes: {
-      promoCode?: string;
-      giftCardNumber?: string;
-    }) => ({
-      ...buildCalculationPayload(
-        {
-          ...currentForm,
-          promoCode: codes.promoCode ?? '',
-          giftCardNumber: codes.giftCardNumber ?? '',
-        },
-        { registerInLoyaltyProgram: false },
-      ),
-      phone: undefined,
-    });
-
-    let resolvedPromoCode = promoCode;
-    let resolvedGiftCardNumber = giftCardNumber;
-
-    if (promoCode && giftCardNumber && promoCode === giftCardNumber) {
-      setCalculationProgressLabel('Проверяем промокод...');
-      const promoResult = await validatePromoCode(
-        buildLookupPayload({ promoCode, giftCardNumber: '' }),
-      );
-
-      if (hasPromoMatch(promoResult)) {
-        resolvedGiftCardNumber = '';
-      } else {
-        setCalculationProgressLabel('Проверяем сертификат...');
-        const giftResult = await validateGiftCard(
-          buildLookupPayload({ promoCode: '', giftCardNumber }),
-        );
-
-        if (hasGiftCardMatch(giftResult)) {
-          resolvedPromoCode = '';
-        } else {
-          resolvedGiftCardNumber = '';
-        }
-      }
-    } else {
-      if (promoCode) {
-        setCalculationProgressLabel('Проверяем промокод...');
-        const promoResult = await validatePromoCode(
-          buildLookupPayload({ promoCode, giftCardNumber: '' }),
-        );
-
-        if (!hasPromoMatch(promoResult)) {
-          setCalculationProgressLabel('Проверяем, не является ли код сертификатом...');
-          const giftFallbackResult = await validateGiftCard(
-            buildLookupPayload({ promoCode: '', giftCardNumber: promoCode }),
-          );
-
-          if (hasGiftCardMatch(giftFallbackResult)) {
-            resolvedPromoCode = '';
-            resolvedGiftCardNumber = promoCode;
-          }
-        }
-      }
-
-      if (giftCardNumber) {
-        setCalculationProgressLabel('Проверяем сертификат...');
-        const giftResult = await validateGiftCard(
-          buildLookupPayload({ promoCode: '', giftCardNumber }),
-        );
-
-        if (!hasGiftCardMatch(giftResult)) {
-          setCalculationProgressLabel('Проверяем, не является ли код промокодом...');
-          const promoFallbackResult = await validatePromoCode(
-            buildLookupPayload({ promoCode: giftCardNumber, giftCardNumber: '' }),
-          );
-
-          if (hasPromoMatch(promoFallbackResult)) {
-            resolvedPromoCode = giftCardNumber;
-            resolvedGiftCardNumber = '';
-          }
-        }
-      }
-    }
-
     return {
       ...currentForm,
-      promoCode: resolvedPromoCode,
-      giftCardNumber: resolvedGiftCardNumber,
+      promoCode,
+      giftCardNumber,
     };
   }
 
