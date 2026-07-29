@@ -47,6 +47,7 @@ const PICKUP_DETAILS = {
 };
 
 const CHECKOUT_PROFILE_KEY = 'lapaloma_checkout_profile_v1';
+const CHECKOUT_LOYALTY_PHONE_KEY = 'lapaloma_checkout_loyalty_phone_v1';
 
 export type CheckoutFormState = {
   customer: {
@@ -149,6 +150,19 @@ function readStoredProfile(): Partial<CheckoutFormState> | null {
       deliveryMethod: readString(parsed.deliveryMethod),
       loyaltyCardNumber: readString(parsed.loyaltyCardNumber),
     };
+  } catch {
+    return null;
+  }
+}
+
+function readStoredLoyaltyPhone() {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(CHECKOUT_LOYALTY_PHONE_KEY);
+    return rawValue ? normalizePhone(rawValue) || null : null;
   } catch {
     return null;
   }
@@ -308,6 +322,20 @@ function getDiscountBreakdown(result: CheckoutCalculationResponse | null) {
   };
 }
 
+function hasEffectiveDiscount(
+  result: CheckoutCalculationResponse | null,
+  subtotal: number,
+) {
+  if (!result) {
+    return false;
+  }
+
+  const { totalDiscount, prepaidAmount } = getDiscountBreakdown(result);
+  const discountAmount = Math.max(0, subtotal - result.total);
+
+  return discountAmount > 0 || totalDiscount > 0 || prepaidAmount > 0;
+}
+
 function getCalculationStatusMessage(
   result: CheckoutCalculationResponse | null,
   subtotal: number,
@@ -316,12 +344,12 @@ function getCalculationStatusMessage(
     return null;
   }
 
-  const { totalDiscount, prepaidAmount } = getDiscountBreakdown(result);
   const discountAmount = Math.max(0, subtotal - result.total);
-  const hasPromo = Boolean(getPromocodeLabel(result));
-  const hasGiftCards = Array.isArray(result.giftCards) && result.giftCards.length > 0;
-  const hasDiscounts = totalDiscount > 0 || prepaidAmount > 0;
+  const hasDiscounts = hasEffectiveDiscount(result, subtotal);
   const hasRegisteredInLoyalty = Boolean(result.payload.registerInLoyaltyProgram);
+  const hasPromo = Boolean(getPromocodeLabel(result)) && hasDiscounts;
+  const hasGiftCards =
+    Array.isArray(result.giftCards) && result.giftCards.length > 0 && hasDiscounts;
 
   if (discountAmount > 0) {
     return hasRegisteredInLoyalty
@@ -381,9 +409,12 @@ function getCalculationSourceMessage(
 
   const { totalDiscount, prepaidAmount } = getDiscountBreakdown(result);
   const discountAmount = Math.max(0, subtotal - result.total);
+  const hasActualDiscount = hasEffectiveDiscount(result, subtotal);
   const promoLabel = getPromocodeLabel(result);
-  const hasPromo = Boolean(promoLabel);
-  const hasGiftCards = Array.isArray(result.giftCards) && result.giftCards.length > 0;
+  const hasPromo = Boolean(promoLabel) && hasActualDiscount;
+  const hasGiftCards =
+    (Array.isArray(result.giftCards) && result.giftCards.length > 0 && hasActualDiscount) ||
+    prepaidAmount > 0;
   const hasClientDiscount =
     !hasPromo &&
     !hasGiftCards &&
@@ -398,7 +429,7 @@ function getCalculationSourceMessage(
     return `Источник скидки: промокод${promoLabel ? ` (${promoLabel})` : ''}`;
   }
 
-  if (hasGiftCards || prepaidAmount > 0) {
+  if (hasGiftCards) {
     return 'Источник скидки: сертификат';
   }
 
@@ -419,9 +450,12 @@ function getAcceptedCalculationMessage(
 
   const { totalDiscount, prepaidAmount } = getDiscountBreakdown(result);
   const discountAmount = Math.max(0, subtotal - result.total);
+  const hasActualDiscount = hasEffectiveDiscount(result, subtotal);
   const promoLabel = getPromocodeLabel(result);
-  const hasPromo = Boolean(promoLabel);
-  const hasGiftCards = Array.isArray(result.giftCards) && result.giftCards.length > 0;
+  const hasPromo = Boolean(promoLabel) && hasActualDiscount;
+  const hasGiftCards =
+    (Array.isArray(result.giftCards) && result.giftCards.length > 0 && hasActualDiscount) ||
+    prepaidAmount > 0;
   const hasClientDiscount =
     !hasPromo &&
     !hasGiftCards &&
@@ -438,7 +472,7 @@ function getAcceptedCalculationMessage(
       : 'Промокод применился';
   }
 
-  if (hasGiftCards || prepaidAmount > 0) {
+  if (hasGiftCards) {
     return 'Сертификат применился';
   }
 
@@ -446,7 +480,7 @@ function getAcceptedCalculationMessage(
     return 'Скидка клиента применилась';
   }
 
-  if (discountAmount > 0 || totalDiscount > 0) {
+  if (hasActualDiscount) {
     return 'Скидка применилась';
   }
 
@@ -471,8 +505,8 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
   const [calculationProgressLabel, setCalculationProgressLabel] = useState<string | null>(
     null,
   );
-  const [loyaltyRegistrationPhone, setLoyaltyRegistrationPhone] = useState<string | null>(
-    null,
+  const [loyaltyRegistrationPhone, setLoyaltyRegistrationPhone] = useState<string | null>(() =>
+    readStoredLoyaltyPhone(),
   );
   const [hadKnownCustomerAtStart] = useState(() => {
     const mergedForm = mergeStoredProfile(initialForm, readStoredProfile());
@@ -489,7 +523,9 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     normalizeDiscountCode(form.promoCode) || normalizeDiscountCode(form.giftCardNumber),
   );
   const registerInLoyaltyProgram =
-    Boolean(loyaltyRegistrationPhone) && loyaltyRegistrationPhone === normalizedPhone;
+    !hasManualDiscountInput &&
+    Boolean(loyaltyRegistrationPhone) &&
+    loyaltyRegistrationPhone === normalizedPhone;
   const calculationPayload = useMemo(
     () => buildCalculationPayload(form, { registerInLoyaltyProgram }),
     [form, registerInLoyaltyProgram],
@@ -536,6 +572,25 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
   }, [storedProfileJson]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      if (loyaltyRegistrationPhone) {
+        window.localStorage.setItem(
+          CHECKOUT_LOYALTY_PHONE_KEY,
+          loyaltyRegistrationPhone,
+        );
+      } else {
+        window.localStorage.removeItem(CHECKOUT_LOYALTY_PHONE_KEY);
+      }
+    } catch {
+      // ignore storage errors in private mode
+    }
+  }, [loyaltyRegistrationPhone]);
+
+  useEffect(() => {
     if (
       !hadKnownCustomerAtStart ||
       autoCalculatedLoyaltyRef.current ||
@@ -556,7 +611,7 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
 
       try {
         setCalculationProgressLabel('Проверяем скидку для вашего профиля...');
-        await runCalculation(buildCalculationPayload(form));
+        await runCalculation(calculationPayload);
       } catch (submitError) {
         if (cancelled) {
           return;
@@ -582,6 +637,7 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
       cancelled = true;
     };
   }, [
+    calculationPayload,
     form,
     hasManualDiscountInput,
     hadKnownCustomerAtStart,

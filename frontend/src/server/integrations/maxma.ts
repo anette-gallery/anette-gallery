@@ -50,6 +50,23 @@ function splitFullName(fullName: string) {
   };
 }
 
+function readNumericValue(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.replace(',', '.').trim();
+    const parsed = Number(normalized);
+
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return 0;
+}
+
 function buildClientInfo(payload: SyncCustomerPayload) {
   const { surname, name, patronymicName } = splitFullName(payload.fullName);
 
@@ -495,11 +512,8 @@ async function calculateAction(
     const giftCards = Array.isArray(calculationResult.giftCards)
       ? calculationResult.giftCards
       : [];
-
-    const totalDiscount =
-      typeof summary.totalDiscount === 'number' ? summary.totalDiscount : 0;
-    const prepaidAmount =
-      typeof summary.prepaidAmount === 'number' ? summary.prepaidAmount : 0;
+    const totalDiscount = readNumericValue(summary.totalDiscount);
+    const prepaidAmount = readNumericValue(summary.prepaidAmount);
     const total = Math.max(0, subtotal - totalDiscount - prepaidAmount);
 
     return {

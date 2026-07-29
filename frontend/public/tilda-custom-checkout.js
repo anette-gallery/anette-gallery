@@ -7,9 +7,10 @@
     (script && script.dataset && script.dataset.buttonText) ||
     'Оформить заказ';
   var BRIDGE_ATTR = 'data-custom-checkout-bound';
-  var CART_ROOT_SELECTOR = '.t706__cartwin, .t706, .t-store__cart, .t-popup, .t228__cart, .js-store-cart';
+  var CART_ROOT_SELECTOR =
+    '.t706__cartwin, .t706__cartpage, .t706__sidebar, .t706, .t-store__cart, .t-popup, .t228__cart, .js-store-cart';
   var CART_ACTION_SELECTOR =
-    'button, a, input[type="submit"], input[type="button"], [role="button"], .t706__cartwin-proceed, .t706__orderform-btn, .js-store-order, .js-cart-order, .js-tcart-checkout';
+    'button, a, input[type="submit"], input[type="button"], [role="button"], .t706__cartwin-proceed, .t706__cartpage-open-form, .t706__sidebar-continue, .t706__orderform-btn, .js-store-order, .js-cart-order, .js-tcart-checkout';
 
   function toNumber(value) {
     if (typeof value === 'number' && Number.isFinite(value)) {
@@ -80,8 +81,10 @@
   function tryReadWindowCart() {
     var candidates = [
       window.tcart && window.tcart.products,
+      window.tcart && window.tcart.prod,
       window.tildaCart && window.tildaCart.products,
       window.t_store && window.t_store.products,
+      window.tcart__products,
     ];
 
     for (var i = 0; i < candidates.length; i += 1) {
@@ -96,7 +99,7 @@
   }
 
   function tryReadStorageCart() {
-    var keys = ['tcart', 'tcart_products', 'tilda_cart', 'tildacart'];
+    var keys = ['tcart', 'tcart_products', 'tilda_cart', 'tildacart', '__tcart', 't706cart'];
 
     for (var i = 0; i < keys.length; i += 1) {
       var raw = null;
@@ -144,7 +147,7 @@
 
   function tryReadDomCart() {
     var nodes = document.querySelectorAll(
-      '.t706__product, .t706__cartwin-prod, .js-product'
+      '.t706__product, .t706__cartwin-prod, .t706__cartpage-prod, .t706__sidebar-prod, .js-product'
     );
 
     if (!nodes.length) {
@@ -155,6 +158,8 @@
       var title = textContent(node, [
         '.t706__product-title',
         '.t706__cartwin-prodtitle',
+        '.t706__cartpage-prodtitle',
+        '.t706__sidebar-prodtitle',
         '.t706__cartwin-prodname',
         '.js-product-name',
       ]);
@@ -168,7 +173,12 @@
         node.getAttribute('data-product-lid') ||
         ('item-' + (index + 1));
       var quantity = toQuantity(
-        textContent(node, ['.t706__product-quantity', '.t706__cartwin-prodquantity'])
+        textContent(node, [
+          '.t706__product-quantity',
+          '.t706__cartwin-prodquantity',
+          '.t706__cartpage-prodquantity',
+          '.t706__sidebar-prodquantity',
+        ])
       );
       var imageNode = node.querySelector(
         'img.t706__product-img, img.t706__cartwin-prodimg, img, [data-original], [data-img-zoom-url]'
@@ -184,6 +194,8 @@
           '.t706__cartwin-prodamount-price',
           '.t706__product-price',
           '.t706__cartwin-prodamount',
+          '.t706__cartpage-prodamount',
+          '.t706__sidebar-prodamount',
         ])
       );
 
@@ -604,7 +616,7 @@
     var looksLikeCheckoutAction =
       /оформ|заказ|checkout|order/.test(text) ||
       /checkout|order|cart/.test(href) ||
-      /order|checkout|cart/.test(className);
+      /order|checkout|cart|cartpage-open-form|sidebar-continue/.test(className);
 
     return inCartPopup && looksLikeCheckoutAction;
   }
