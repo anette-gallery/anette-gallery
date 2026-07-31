@@ -7,10 +7,88 @@
     (script && script.dataset && script.dataset.buttonText) ||
     'Оформить заказ';
   var BRIDGE_ATTR = 'data-custom-checkout-bound';
+  var BUTTON_CLASS = 't-custom-checkout-button';
+  var STYLE_ELEMENT_ID = 't-custom-checkout-button-styles';
   var CART_ROOT_SELECTOR =
     '.t706__cartwin, .t706__cartpage, .t706__sidebar, .t706, .t-store__cart, .t-popup, .t228__cart, .js-store-cart';
   var CART_ACTION_SELECTOR =
     'button, a, input[type="submit"], input[type="button"], [role="button"], .t706__cartwin-proceed, .t706__cartpage-open-form, .t706__sidebar-continue, .t706__orderform-btn, .js-store-order, .js-cart-order, .js-tcart-checkout';
+
+  function injectButtonStyles() {
+    if (document.getElementById(STYLE_ELEMENT_ID)) {
+      return;
+    }
+
+    var style = document.createElement('style');
+    style.id = STYLE_ELEMENT_ID;
+    style.textContent =
+      '.' +
+      BUTTON_CLASS +
+      '{' +
+      'display:flex !important;' +
+      'align-items:center !important;' +
+      'justify-content:center !important;' +
+      'width:100% !important;' +
+      'min-height:56px !important;' +
+      'padding:16px 24px !important;' +
+      'border:0 !important;' +
+      'border-radius:12px !important;' +
+      'background:#d61f1f !important;' +
+      'background-image:none !important;' +
+      'box-shadow:0 10px 24px rgba(214,31,31,0.18) !important;' +
+      'color:#fff !important;' +
+      'font-size:18px !important;' +
+      'font-weight:600 !important;' +
+      'line-height:1.2 !important;' +
+      'text-align:center !important;' +
+      'text-decoration:none !important;' +
+      'opacity:1 !important;' +
+      'cursor:pointer !important;' +
+      'transition:transform .18s ease, box-shadow .18s ease, background-color .18s ease !important;' +
+      '}' +
+      '.' +
+      BUTTON_CLASS +
+      ':hover,' +
+      '.' +
+      BUTTON_CLASS +
+      ':focus{' +
+      'background:#bf1717 !important;' +
+      'box-shadow:0 12px 28px rgba(214,31,31,0.22) !important;' +
+      'transform:translateY(-1px) !important;' +
+      'color:#fff !important;' +
+      'outline:none !important;' +
+      '}' +
+      '.' +
+      BUTTON_CLASS +
+      ':disabled{' +
+      'opacity:.75 !important;' +
+      'cursor:not-allowed !important;' +
+      'transform:none !important;' +
+      '}' +
+      '.t706__cartwin .' +
+      BUTTON_CLASS +
+      ',.t706__sidebar .' +
+      BUTTON_CLASS +
+      ',.t706__cartpage .' +
+      BUTTON_CLASS +
+      '{margin-top:8px !important;}';
+
+    document.head.appendChild(style);
+  }
+
+  function applyButtonStyles(node) {
+    if (!node || node.nodeType !== 1) {
+      return;
+    }
+
+    node.classList.add(BUTTON_CLASS);
+    node.style.setProperty('background', '#d61f1f', 'important');
+    node.style.setProperty('background-image', 'none', 'important');
+    node.style.setProperty('color', '#ffffff', 'important');
+    node.style.setProperty('border', '0', 'important');
+    node.style.setProperty('border-radius', '12px', 'important');
+    node.style.setProperty('box-shadow', '0 10px 24px rgba(214,31,31,0.18)', 'important');
+  }
 
   function toNumber(value) {
     if (typeof value === 'number' && Number.isFinite(value)) {
@@ -622,6 +700,8 @@
   }
 
   function bindCartButtons() {
+    injectButtonStyles();
+
     var nodes = document.querySelectorAll(CART_ACTION_SELECTOR);
 
     Array.prototype.forEach.call(nodes, function (node) {
@@ -637,6 +717,7 @@
         node.textContent = BUTTON_TEXT;
       }
 
+      applyButtonStyles(node);
       node.addEventListener('click', openCustomCheckout, true);
     });
   }
