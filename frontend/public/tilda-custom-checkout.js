@@ -10,7 +10,7 @@
   var BUTTON_CLASS = 't-custom-checkout-button';
   var STYLE_ELEMENT_ID = 't-custom-checkout-button-styles';
   var CART_ROOT_SELECTOR =
-    '.t706__cartwin, .t706__cartpage, .t706__sidebar, .t706, .t-store__cart, .t-popup, .t228__cart, .js-store-cart';
+    '.t706__cartwin, .t706__cartpage, .t706__sidebar, .t706, .t-store__cart, .t228__cart, .js-store-cart';
   var CART_ACTION_SELECTOR =
     'button, a, input[type="submit"], input[type="button"], [role="button"], .t706__cartwin-proceed, .t706__cartpage-open-form, .t706__sidebar-continue, .t706__orderform-btn, .js-store-order, .js-cart-order, .js-tcart-checkout';
 
