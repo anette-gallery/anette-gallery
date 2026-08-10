@@ -67,14 +67,28 @@ function readNumericValue(value: unknown): number {
   return 0;
 }
 
-function buildClientInfo(payload: SyncCustomerPayload) {
+type ClientInfoMode = 'create' | 'update';
+
+function buildClientInfo(
+  payload: SyncCustomerPayload,
+  mode: ClientInfoMode = 'create',
+) {
+  const phoneNumber = normalizePhone(payload.phone);
+  const base = {
+    phoneNumber,
+    ...(payload.loyaltyCardNumber ? { card: payload.loyaltyCardNumber } : {}),
+  };
+
+  if (mode === 'update') {
+    return base;
+  }
+
   const { surname, name, patronymicName } = splitFullName(payload.fullName);
 
   return {
-    phoneNumber: normalizePhone(payload.phone),
+    ...base,
     fullName: payload.fullName,
     ...(payload.email ? { email: payload.email } : {}),
-    ...(payload.loyaltyCardNumber ? { card: payload.loyaltyCardNumber } : {}),
     ...(surname ? { surname } : {}),
     ...(name ? { name } : {}),
     ...(patronymicName ? { patronymicName } : {}),
@@ -332,7 +346,8 @@ async function post(
 
 export function syncCustomer(payload: SyncCustomerPayload) {
   const phoneNumber = normalizePhone(payload.phone);
-  const client = buildClientInfo(payload);
+  const clientForUpdate = buildClientInfo(payload, 'update');
+  const clientForCreate = buildClientInfo(payload, 'create');
 
   if (!isLiveEnabled(getAppConfig().integrations.maxma.customerSyncPath)) {
     return post(
@@ -340,17 +355,18 @@ export function syncCustomer(payload: SyncCustomerPayload) {
       'sync-customer',
       {
         phoneNumber,
-        client,
+        client: clientForUpdate,
       },
     );
   }
 
-  return syncCustomerLive(phoneNumber, client);
+  return syncCustomerLive(phoneNumber, clientForUpdate, clientForCreate);
 }
 
 async function syncCustomerLive(
   phoneNumber: string,
-  client: ReturnType<typeof buildClientInfo>,
+  clientForUpdate: ReturnType<typeof buildClientInfo>,
+  clientForCreate: ReturnType<typeof buildClientInfo>,
 ) {
   const config = getAppConfig();
   const updateResult = await post(
@@ -358,7 +374,7 @@ async function syncCustomerLive(
     'sync-customer',
     {
       phoneNumber,
-      client,
+      client: clientForUpdate,
     },
   );
 
@@ -390,7 +406,7 @@ async function syncCustomerLive(
     config.integrations.maxma.newClientPath,
     'sync-customer',
     {
-      client,
+      client: clientForCreate,
     },
   );
 
