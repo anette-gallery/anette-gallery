@@ -6,7 +6,7 @@ function buildCorsHeaders() {
 
   return {
     'Access-Control-Allow-Origin': server.corsOrigin,
-    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+    'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
     'Access-Control-Allow-Headers':
       'Content-Type, Authorization, X-Tilda-Webhook-Secret',
   };

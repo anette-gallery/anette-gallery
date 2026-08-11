@@ -198,3 +198,86 @@ export async function listRecentOrderRequests(
 
   return rows.map(toOrderRequestListItem);
 }
+
+export async function findOrderRequestById(
+  id: string,
+): Promise<OrderRequestListItem | null> {
+  if (!isDatabaseConfigured() || !id) {
+    return null;
+  }
+
+  await ensureOrderRequestsTable();
+
+  const rows = await query<OrderRequestRow>(
+    `
+      SELECT
+        id,
+        source_channel,
+        status,
+        full_name,
+        phone,
+        email,
+        total_amount,
+        items_count,
+        delivery_method,
+        comment,
+        raw_payload,
+        response_payload,
+        created_at,
+        updated_at
+      FROM order_requests
+      WHERE id = $1
+      LIMIT 1
+    `,
+    [id],
+  );
+
+  return rows[0] ? toOrderRequestListItem(rows[0]) : null;
+}
+
+type AckOrderRequestOptions = {
+  status: string;
+  onecDocId?: string;
+  onecDocNumber?: string;
+  note?: string;
+};
+
+export async function ackOrderRequest(
+  id: string,
+  options: AckOrderRequestOptions,
+) {
+  if (!isDatabaseConfigured() || !id) {
+    return;
+  }
+
+  await ensureOrderRequestsTable();
+
+  const current = await findOrderRequestById(id);
+  const baseResponse =
+    current && typeof current.responsePayload === 'object' && current.responsePayload !== null
+      ? (current.responsePayload as Record<string, unknown>)
+      : {};
+  const mergedResponse = {
+    ...baseResponse,
+    acked: true,
+    ackedAt: new Date().toISOString(),
+    ackedBy: '1c',
+    ...(options.onecDocId ? { onecDocId: options.onecDocId } : {}),
+    ...(options.onecDocNumber
+      ? { onecDocNumber: options.onecDocNumber }
+      : {}),
+    ...(options.note ? { onecNote: options.note } : {}),
+  };
+
+  await query(
+    `
+      UPDATE order_requests
+      SET
+        status = $2,
+        response_payload = $3::jsonb,
+        updated_at = NOW()
+      WHERE id = $1
+    `,
+    [id, options.status || 'processed', JSON.stringify(mergedResponse)],
+  );
+}
