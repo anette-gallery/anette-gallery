@@ -29,6 +29,23 @@ function parseLimit(request: Request): number {
   return Math.min(Math.trunc(parsed), 100);
 }
 
+function parseStatus(request: Request): string | undefined {
+  const { searchParams } = new URL(request.url);
+  const value = searchParams.get('status');
+
+  if (!value) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return undefined;
+  }
+
+  return trimmed;
+}
+
 function wantsJson(request: Request): boolean {
   const { searchParams } = new URL(request.url);
   const format = searchParams.get('format');
@@ -399,13 +416,17 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   const limit = parseLimit(request);
-  const orders = await listRecentOrderRequests(limit);
+  const status = parseStatus(request);
+  const orders = await listRecentOrderRequests({ limit, status });
   const data = {
     status: 'ok',
     source: 'custom-checkout-orders',
     databaseConfigured: isDatabaseConfigured(),
+    filter: {
+      limit,
+      status: status ?? null,
+    },
     count: orders.length,
-    limit,
     orders,
   };
 

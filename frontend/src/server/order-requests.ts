@@ -164,7 +164,7 @@ function toOrderRequestListItem(row: OrderRequestRow): OrderRequestListItem {
 }
 
 export async function listRecentOrderRequests(
-  limit = 20,
+  options: { limit?: number; status?: string } = {},
 ): Promise<OrderRequestListItem[]> {
   if (!isDatabaseConfigured()) {
     return [];
@@ -172,29 +172,60 @@ export async function listRecentOrderRequests(
 
   await ensureOrderRequestsTable();
 
-  const rows = await query<OrderRequestRow>(
-    `
-      SELECT
-        id,
-        source_channel,
-        status,
-        full_name,
-        phone,
-        email,
-        total_amount,
-        items_count,
-        delivery_method,
-        comment,
-        raw_payload,
-        response_payload,
-        created_at,
-        updated_at
-      FROM order_requests
-      ORDER BY created_at DESC
-      LIMIT $1
-    `,
-    [limit],
-  );
+  const limit = Math.min(Math.max(1, Math.trunc(options.limit ?? 20)), 100);
+  const statusFilter =
+    typeof options.status === 'string' && options.status.trim().length > 0
+      ? options.status.trim()
+      : null;
+
+  const rows = statusFilter
+    ? await query<OrderRequestRow>(
+        `
+          SELECT
+            id,
+            source_channel,
+            status,
+            full_name,
+            phone,
+            email,
+            total_amount,
+            items_count,
+            delivery_method,
+            comment,
+            raw_payload,
+            response_payload,
+            created_at,
+            updated_at
+          FROM order_requests
+          WHERE status = $1
+          ORDER BY created_at DESC
+          LIMIT $2
+        `,
+        [statusFilter, limit],
+      )
+    : await query<OrderRequestRow>(
+        `
+          SELECT
+            id,
+            source_channel,
+            status,
+            full_name,
+            phone,
+            email,
+            total_amount,
+            items_count,
+            delivery_method,
+            comment,
+            raw_payload,
+            response_payload,
+            created_at,
+            updated_at
+          FROM order_requests
+          ORDER BY created_at DESC
+          LIMIT $1
+        `,
+        [limit],
+      );
 
   return rows.map(toOrderRequestListItem);
 }
