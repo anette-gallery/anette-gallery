@@ -8,6 +8,14 @@ import type {
 
 let orderRequestsTableEnsured = false;
 
+function toJsonbText(value: unknown): string {
+  try {
+    return JSON.stringify(value ?? {});
+  } catch {
+    return JSON.stringify({ _error: 'unserializable', _type: typeof value });
+  }
+}
+
 async function ensureOrderRequestsTable() {
   if (orderRequestsTableEnsured || !isDatabaseConfigured()) {
     return;
@@ -101,15 +109,15 @@ export async function saveOrderRequest(
       id,
       'custom-checkout',
       'received',
-      payload.customer.fullName,
-      payload.customer.phone,
-      payload.customer.email ?? null,
-      payload.totalAmount,
-      payload.items.length,
-      payload.deliveryMethod ?? null,
-      payload.comment ?? null,
-      JSON.stringify(payload),
-      paymentMethod,
+      typeof payload.customer.fullName === 'string' ? payload.customer.fullName : null,
+      typeof payload.customer.phone === 'string' ? payload.customer.phone : null,
+      typeof payload.customer.email === 'string' ? payload.customer.email : null,
+      typeof payload.totalAmount === 'number' && Number.isFinite(payload.totalAmount) ? payload.totalAmount : 0,
+      typeof payload.items?.length === 'number' ? payload.items.length : 0,
+      typeof payload.deliveryMethod === 'string' ? payload.deliveryMethod : null,
+      typeof payload.comment === 'string' ? payload.comment : null,
+      toJsonbText(payload),
+      typeof paymentMethod === 'string' ? paymentMethod : null,
       paymentStatus,
     ],
   );
@@ -142,7 +150,7 @@ export async function finalizeOrderRequest(
         updated_at = NOW()
       WHERE id = $1
     `,
-    [id, status, JSON.stringify(response ?? {})],
+    [String(id), String(status), toJsonbText(response ?? {})],
   );
 }
 
@@ -343,7 +351,7 @@ export async function ackOrderRequest(
         updated_at = NOW()
       WHERE id = $1
     `,
-    [id, options.status || 'processed', JSON.stringify(mergedResponse)],
+    [String(id), String(options.status || 'processed'), toJsonbText(mergedResponse)],
   );
 }
 
@@ -381,22 +389,22 @@ export async function setOrderRequestPayment(
 
   const values: unknown[] = [id];
   const sets: string[] = [];
-  sets.push(`payment_status = $${values.push(options.paymentStatus) - values.length + 1}`);
+  sets.push(`payment_status = $${values.push(String(options.paymentStatus)) - values.length + 1}`);
   if (options.paymentInvoiceId) {
     sets.push(
-      `payment_invoice_id = $${values.push(options.paymentInvoiceId) - values.length + 1}`,
+      `payment_invoice_id = $${values.push(String(options.paymentInvoiceId)) - values.length + 1}`,
     );
   }
   if (options.paymentMethod) {
     sets.push(
-      `payment_method = $${values.push(options.paymentMethod) - values.length + 1}`,
+      `payment_method = $${values.push(String(options.paymentMethod)) - values.length + 1}`,
     );
   }
   sets.push(
-    `payment_payload = $${values.push(JSON.stringify(mergedPayment)) - values.length + 1}::jsonb`,
+    `payment_payload = $${values.push(toJsonbText(mergedPayment)) - values.length + 1}::jsonb`,
   );
   if (options.status) {
-    sets.push(`status = $${values.push(options.status) - values.length + 1}`);
+    sets.push(`status = $${values.push(String(options.status)) - values.length + 1}`);
   }
   sets.push(`updated_at = NOW()`);
   const sql = `UPDATE order_requests SET ${sets.join(', ')} WHERE id = $1`;
