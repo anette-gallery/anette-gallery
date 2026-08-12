@@ -439,8 +439,10 @@ function getCalculationSourceMessage(
   const hasClientDiscount =
     !hasPromo &&
     !hasGiftCards &&
-    (Boolean(result.payload.registerInLoyaltyProgram) ||
-      Boolean(result.payload.phone && (discountAmount > 0 || totalDiscount > 0)));
+    Boolean(
+      isPhoneReady(result.payload.phone ?? '') &&
+        (discountAmount > 0 || totalDiscount > 0),
+    );
 
   if (hasPromo && hasGiftCards) {
     return 'Источник скидки: промокод и сертификат';
@@ -480,8 +482,10 @@ function getAcceptedCalculationMessage(
   const hasClientDiscount =
     !hasPromo &&
     !hasGiftCards &&
-    (Boolean(result.payload.registerInLoyaltyProgram) ||
-      Boolean(result.payload.phone && (discountAmount > 0 || totalDiscount > 0)));
+    Boolean(
+      isPhoneReady(result.payload.phone ?? '') &&
+        (discountAmount > 0 || totalDiscount > 0),
+    );
 
   if (hasPromo && hasGiftCards) {
     return 'Промокод и сертификат применились';
