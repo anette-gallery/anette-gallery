@@ -831,8 +831,14 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
           persistError: false,
         },
       );
+
+      const orderTotal =
+        latestCalculation?.totalAmount ??
+        latestCalculation?.total ??
+        subtotal;
+
       const response = await createOrder(
-        buildOrderPayload(resolvedForm, latestCalculation.totalAmount),
+        buildOrderPayload(resolvedForm, orderTotal),
       );
 
       setOrderResponse(response);

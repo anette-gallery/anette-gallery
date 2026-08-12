@@ -314,10 +314,20 @@ export function parseCreateOrderPayload(input: unknown): CreateOrderPayload {
     throw new Error('Поле "items" должно содержать хотя бы один товар');
   }
 
+  const items = input.items.map(parseOrderItem);
+  const fallbackTotal = items.reduce(
+    (sum, it) => sum + (Number(it.unitPrice ?? 0) * Math.max(1, Number(it.quantity ?? 1))),
+    0,
+  );
+  const rawTotal =
+    typeof input.totalAmount === 'number' && Number.isFinite(input.totalAmount) && input.totalAmount >= 0
+      ? input.totalAmount
+      : fallbackTotal;
+
   return {
     customer: parseOrderCustomer(input.customer),
-    items: input.items.map(parseOrderItem),
-    totalAmount: expectNumber(input.totalAmount, 'totalAmount', { min: 0 })!,
+    items,
+    totalAmount: expectNumber(rawTotal, 'totalAmount', { min: 0 })!,
     promoCode: expectString(input.promoCode, 'promoCode', {
       optional: true,
       maxLength: 64,
