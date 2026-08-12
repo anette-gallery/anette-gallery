@@ -386,7 +386,7 @@ function getCalculationStatusMessage(
     return `Регистрация в программе лояльности отправлена. Сейчас итоговая сумма: ${formatCurrency((result.total ?? result.totalAmount) as number)}.`;
   }
 
-  return `Скидка не найдена. MAXMA вернула 0 ₽ скидки и 0 ₽ бонусов, итоговая сумма без изменений: ${formatCurrency((result.total ?? result.totalAmount) as number)}.`;
+  return `Скидка не найдена. Итоговая сумма без изменений: ${formatCurrency((result.total ?? result.totalAmount) as number)}.`;
 }
 
 function shouldOfferLoyaltyRegistration(
@@ -520,6 +520,7 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
   const [orderResponse, setOrderResponse] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [orderError, setOrderError] = useState<string | null>(null);
+  const [paymentRedirectUrl, setPaymentRedirectUrl] = useState<string | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastCalculatedKey, setLastCalculatedKey] = useState<string>('');
@@ -815,6 +816,7 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     setOrderError(null);
     setError(null);
     setOrderResponse(null);
+    setPaymentRedirectUrl(null);
 
     let responseStatus: string | null = null;
     let orderId: string | null = null;
@@ -871,20 +873,29 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
           if (invoice && typeof (invoice as Record<string, unknown>).paymentUrl === 'string') {
             if (typeof window !== 'undefined') {
               const targetUrl = (invoice as Record<string, unknown>).paymentUrl as string;
-              window.location.href = targetUrl;
+              setPaymentRedirectUrl(targetUrl);
+              try {
+                window.location.assign(targetUrl);
+              } catch {
+                window.location.href = targetUrl;
+              }
               return;
             }
           } else {
             const raw = JSON.stringify(invoice ?? {});
             throw new Error(
-              `Не удалось получить ссылку на оплату. Ответ платежки: ${raw.slice(0, 200)}`,
+              `Не удалось получить ссылку на оплату. Ответ платежной системы: ${raw.slice(0, 200)}`,
             );
           }
         } catch (pkError) {
-          const pkMessage =
+          let pkMessage =
             pkError instanceof Error ? pkError.message : 'Не удалось создать платеж.';
+          if (pkMessage.toLowerCase().includes('paykeeper')) {
+            pkMessage = pkMessage.replace(/paykeeper[^a-zа-я0-9]*/gi, 'Платежная система').replace(/Платежная система\s+/gi, 'Платежная система ');
+          }
           setOrderError(pkMessage);
           setOrderResponse(null);
+          setPaymentRedirectUrl(null);
           return;
         }
       }
@@ -1341,12 +1352,41 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
             ) : null}
             {isOrderSuccessful && !orderError ? (
               <div className={styles.successBanner}>
-                <p className={styles.successBannerTitle}>Заявка отправлена</p>
-                <p className={styles.successBannerText}>
-                  {form.paymentMethod === 'online_card'
-                    ? 'Сейчас вы будете перенаправлены на страницу оплаты. После успешной оплаты мы вернем вас на сайт.'
-                    : 'Мы свяжемся с вами в ближайшее время для подтверждения и согласования доставки. Спасибо за заказ!'}
-                </p>
+                {paymentRedirectUrl ? (
+                  <>
+                    <p className={styles.successBannerTitle}>Переходим к оплате</p>
+                    <p className={styles.successBannerText}>
+                      Если страница оплаты не открылась в течение 5 секунд — нажми на ссылку ниже:
+                    </p>
+                    <p style={{margin: '10px 0 0 0'}}>
+                      <a
+                        href={paymentRedirectUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: 'inline-block',
+                          padding: '12px 22px',
+                          background: '#0e5a31',
+                          color: '#fff',
+                          textDecoration: 'none',
+                          borderRadius: 10,
+                          fontWeight: 600,
+                        }}
+                      >
+                        Перейти к оплате →
+                      </a>
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className={styles.successBannerTitle}>Заявка отправлена</p>
+                    <p className={styles.successBannerText}>
+                      {form.paymentMethod === 'online_card'
+                        ? 'Сейчас вы будете перенаправлены на страницу оплаты. После успешной оплаты мы вернем вас на сайт.'
+                        : 'Мы свяжемся с вами в ближайшее время для подтверждения и согласования доставки. Спасибо за заказ!'}
+                    </p>
+                  </>
+                )}
               </div>
             ) : null}
             {getCompatibilityMessage(calculation) ? (

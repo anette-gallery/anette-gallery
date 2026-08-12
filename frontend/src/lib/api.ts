@@ -32,7 +32,7 @@ async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
     window.clearTimeout(timeoutId);
 
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('MAXMA долго отвечает. Попробуйте еще раз.');
+      throw new Error('Сервис расчета скидок сейчас долго отвечает. Попробуйте еще раз через 10 секунд.');
     }
 
     throw error;
