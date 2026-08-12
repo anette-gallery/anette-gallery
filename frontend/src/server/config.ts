@@ -112,11 +112,30 @@ export function getAppConfig(): AppConfig {
           toOptionalString(process.env.MAXMA_GIFT_CARD_VALIDATE_PATH) ??
           '/v2/calculate-purchase',
         orderCreatePath:
-          toOptionalString(process.env.MAXMA_ORDER_CREATE_PATH) ?? '/set-purchase',
-        confirmTicketPath:
-          toOptionalString(process.env.MAXMA_CONFIRM_TICKET_PATH) ??
-          '/confirm-ticket',
-      },
+        toOptionalString(process.env.MAXMA_ORDER_CREATE_PATH) ?? '/set-purchase',
+      confirmTicketPath:
+        toOptionalString(process.env.MAXMA_CONFIRM_TICKET_PATH) ??
+        '/confirm-ticket',
+    };
+    paykeeper: {
+      baseUrl: toOptionalString(process.env.PAYKEEPER_BASE_URL),
+      username: toOptionalString(process.env.PAYKEEPER_USERNAME),
+      password: toOptionalString(process.env.PAYKEEPER_PASSWORD),
+      secret: toOptionalString(process.env.PAYKEEPER_SECRET),
+      serverCallbackSecret: toOptionalString(
+        process.env.PAYKEEPER_SERVER_CALLBACK_SECRET,
+      ),
+      successUrl:
+        toOptionalString(process.env.PAYKEEPER_SUCCESS_URL) ??
+        `${toOptionalString(process.env.FRONTEND_PUBLIC_URL) ?? ''}/checkout/success`,
+      failUrl:
+        toOptionalString(process.env.PAYKEEPER_FAIL_URL) ??
+        `${toOptionalString(process.env.FRONTEND_PUBLIC_URL) ?? ''}/checkout/fail`,
+      notifyPath:
+        toOptionalString(process.env.PAYKEEPER_NOTIFY_PATH) ??
+        '/api/v1/payments/paykeeper/notify',
+    };
+  };
       onec: {
         baseUrl: toOptionalString(process.env.ONEC_API_URL),
         login: toOptionalString(process.env.ONEC_API_LOGIN),

@@ -2,6 +2,8 @@ import type {
   CalculateCheckoutPayload,
   CheckoutCalculationResponse,
   CreateOrderPayload,
+  CreatePaymentPayload,
+  CreatePaymentResponse,
 } from '@/types/api';
 
 const API_BASE_URL =
@@ -69,6 +71,13 @@ export function validateGiftCard(payload: CalculateCheckoutPayload) {
 
 export function createOrder(payload: CreateOrderPayload) {
   return apiRequest<Record<string, unknown>>('/orders', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createPaykeeperPayment(payload: CreatePaymentPayload) {
+  return apiRequest<CreatePaymentResponse>('/payments/paykeeper/create', {
     method: 'POST',
     body: JSON.stringify(payload),
   });

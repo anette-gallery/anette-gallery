@@ -27,6 +27,10 @@ async function ensureOrderRequestsTable() {
       comment TEXT,
       raw_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
       response_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+      payment_method VARCHAR(32),
+      payment_status VARCHAR(32),
+      payment_invoice_id VARCHAR(255),
+      payment_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
@@ -58,6 +62,8 @@ export async function saveOrderRequest(
   await ensureOrderRequestsTable();
 
   const id = randomUUID();
+  const paymentMethod = payload.paymentMethod ?? 'cash_on_delivery';
+  const paymentStatus = paymentMethod === 'online_card' ? 'pending' : null;
   await query(
     `
       INSERT INTO order_requests (
@@ -71,10 +77,12 @@ export async function saveOrderRequest(
         items_count,
         delivery_method,
         comment,
-        raw_payload
+        raw_payload,
+        payment_method,
+        payment_status
       )
       VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13
       )
     `,
     [
@@ -89,6 +97,8 @@ export async function saveOrderRequest(
       payload.deliveryMethod ?? null,
       payload.comment ?? null,
       JSON.stringify(payload),
+      paymentMethod,
+      paymentStatus,
     ],
   );
 
@@ -137,6 +147,10 @@ type OrderRequestRow = {
   comment: string | null;
   raw_payload: unknown;
   response_payload: unknown;
+  payment_method: string | null;
+  payment_status: string | null;
+  payment_invoice_id: string | null;
+  payment_payload: unknown;
   created_at: string;
   updated_at: string;
 };
@@ -158,6 +172,14 @@ function toOrderRequestListItem(row: OrderRequestRow): OrderRequestListItem {
     comment: row.comment ?? undefined,
     rawPayload: row.raw_payload,
     responsePayload: row.response_payload,
+    paymentMethod:
+      (row.payment_method as OrderRequestListItem['paymentMethod']) ??
+      undefined,
+    paymentStatus:
+      (row.payment_status as OrderRequestListItem['paymentStatus']) ??
+      undefined,
+    paymentInvoiceId: row.payment_invoice_id ?? undefined,
+    paymentPayload: row.payment_payload ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -311,4 +333,61 @@ export async function ackOrderRequest(
     `,
     [id, options.status || 'processed', JSON.stringify(mergedResponse)],
   );
+}
+
+type SetPaymentOptions = {
+  paymentStatus: string;
+  paymentInvoiceId?: string;
+  paymentPayload?: unknown;
+  paymentMethod?: string;
+  status?: string;
+};
+
+export async function setOrderRequestPayment(
+  id: string,
+  options: SetPaymentOptions,
+) {
+  if (!isDatabaseConfigured() || !id) {
+    return;
+  }
+
+  await ensureOrderRequestsTable();
+
+  const current = await findOrderRequestById(id);
+  const basePaymentPayload =
+    current &&
+    typeof current.paymentPayload === 'object' &&
+    current.paymentPayload !== null
+      ? (current.paymentPayload as Record<string, unknown>)
+      : {};
+
+  const mergedPayment = {
+    ...basePaymentPayload,
+    ...(options.paymentPayload ?? {}),
+    updatedAt: new Date().toISOString(),
+  };
+
+  const values: unknown[] = [id];
+  const sets: string[] = [];
+  sets.push(`payment_status = $${values.push(options.paymentStatus) - values.length + 1}`);
+  if (options.paymentInvoiceId) {
+    sets.push(
+      `payment_invoice_id = $${values.push(options.paymentInvoiceId) - values.length + 1}`,
+    );
+  }
+  if (options.paymentMethod) {
+    sets.push(
+      `payment_method = $${values.push(options.paymentMethod) - values.length + 1}`,
+    );
+  }
+  sets.push(
+    `payment_payload = $${values.push(JSON.stringify(mergedPayment)) - values.length + 1}::jsonb`,
+  );
+  if (options.status) {
+    sets.push(`status = $${values.push(options.status) - values.length + 1}`);
+  }
+  sets.push(`updated_at = NOW()`);
+  const sql = `UPDATE order_requests SET ${sets.join(', ')} WHERE id = $1`;
+
+  await query(sql, values);
 }

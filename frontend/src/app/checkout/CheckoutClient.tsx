@@ -5,12 +5,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   calculateCheckout,
   createOrder,
+  createPaykeeperPayment,
 } from '@/lib/api';
 import type {
   CalculateCheckoutPayload,
   CheckoutCalculationResponse,
   CheckoutItemInput,
   CreateOrderPayload,
+  PaymentMethod,
 } from '@/types/api';
 import styles from './page.module.css';
 
@@ -34,6 +36,23 @@ const DELIVERY_OPTIONS = [
     label: 'Доставка СДЭК / служба доставки',
     hint: 'по тарифу перевозчика',
     summary: 'Доставка службой доставки',
+  },
+];
+
+const PAYMENT_OPTIONS: Array<{
+  value: PaymentMethod;
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: 'cash_on_delivery',
+    label: 'Оплата при получении',
+    hint: 'наличными или картой при получении',
+  },
+  {
+    value: 'online_card',
+    label: 'Оплата картой онлайн',
+    hint: 'банковской картой на странице Paykeeper',
   },
 ];
 
@@ -62,6 +81,7 @@ export type CheckoutFormState = {
     intercom: string;
   };
   deliveryMethod: string;
+  paymentMethod: PaymentMethod;
   loyaltyCardNumber: string;
   promoCode: string;
   giftCardNumber: string;
@@ -268,6 +288,7 @@ function buildOrderPayload(
       address: buildAddress(form.customer),
     },
     deliveryMethod: getDeliveryOption(form.deliveryMethod).summary,
+    paymentMethod: form.paymentMethod,
     loyaltyCardNumber: form.loyaltyCardNumber.trim() || undefined,
     promoCode: normalizeDiscountCode(form.promoCode) || undefined,
     giftCardNumber: normalizeDiscountCode(form.giftCardNumber) || undefined,
@@ -808,7 +829,28 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
 
       setOrderResponse(response);
 
-      if (typeof response.status === 'string' && response.status !== 'ok') {
+      const responseStatus =
+        typeof response?.status === 'string' ? response.status : null;
+      const orderId =
+        typeof (response as Record<string, unknown>)?.id === 'string'
+          ? ((response as Record<string, unknown>).id as string)
+          : null;
+
+      if (form.paymentMethod === 'online_card' && orderId && responseStatus === 'ok') {
+        const invoice = await createPaykeeperPayment({
+          orderId,
+          amount: Math.max(1, Math.trunc(latestCalculation.total)),
+          clientEmail: form.customer.email.trim() || undefined,
+          clientPhone: form.customer.phone.trim() || undefined,
+          description: `Оплата заказа ${orderId.slice(0, 8)} в магазине ANETTE`,
+        });
+        if (typeof window !== 'undefined') {
+          window.location.href = invoice.paymentUrl;
+          return;
+        }
+      }
+
+      if (responseStatus !== 'ok') {
         setOrderError('Заказ не подтвердился. Проверь ответ ниже.');
       }
     } catch (submitError) {
@@ -1162,6 +1204,57 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
                   placeholder="Комментарий к заказу"
                 />
               </label>
+            </section>
+
+            <section className={styles.formSection}>
+              <h2 className={styles.sectionTitle}>Оплата</h2>
+
+              <label className={`${styles.lineField} ${styles.selectField}`}>
+                <select
+                  value={form.paymentMethod}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      paymentMethod:
+                        (event.target.value as PaymentMethod) ||
+                        'cash_on_delivery',
+                    }))
+                  }
+                >
+                  {PAYMENT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className={styles.deliveryChoices}>
+                {PAYMENT_OPTIONS.map((option) => (
+                  <label key={option.value} className={styles.radioRow}>
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      checked={form.paymentMethod === option.value}
+                      onChange={() =>
+                        setForm((current) => ({
+                          ...current,
+                          paymentMethod: option.value,
+                        }))
+                      }
+                    />
+                    <span>
+                      {option.label} <em>{option.hint}</em>
+                    </span>
+                  </label>
+                ))}
+              </div>
+
+              <p className={styles.noteText}>
+                {form.paymentMethod === 'online_card'
+                  ? 'После нажатия «Оформить заказ» вы будете перенаправлены на защищенную страницу оплаты Paykeeper. После успешной оплаты мы вернем вас на сайт.'
+                  : 'Оплата производится наличными или картой при получении заказа.'}
+              </p>
             </section>
 
             <label className={styles.consentRow}>

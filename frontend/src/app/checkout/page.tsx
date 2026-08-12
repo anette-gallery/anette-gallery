@@ -115,6 +115,11 @@ function buildInitialForm(searchParams: SearchParamsInput) {
   const cartItems = parseItems(readString(searchParams.cart));
   const paramItems = parseItems(readString(searchParams.items));
   const items = cartItems.length > 0 ? cartItems : paramItems;
+  const rawPayment = readString(searchParams.paymentMethod);
+  const paymentMethod =
+    rawPayment === 'online_card' || rawPayment === 'cash_on_delivery'
+      ? rawPayment
+      : 'cash_on_delivery';
 
   return {
     customer: {
@@ -130,6 +135,7 @@ function buildInitialForm(searchParams: SearchParamsInput) {
       intercom: readString(searchParams.intercom),
     },
     deliveryMethod: readString(searchParams.delivery) || 'courier',
+    paymentMethod,
     loyaltyCardNumber:
       readString(searchParams.loyaltyCardNumber) || readString(searchParams.card),
     promoCode: readString(searchParams.promoCode) || readString(searchParams.promo),
