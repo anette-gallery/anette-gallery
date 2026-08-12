@@ -814,6 +814,10 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     setIsSubmitting(true);
     setOrderError(null);
     setError(null);
+    setOrderResponse(null);
+
+    let responseStatus: string | null = null;
+    let orderId: string | null = null;
 
     try {
       const resolvedForm = await resolveDiscountFields(form);
@@ -843,29 +847,51 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
 
       setOrderResponse(response);
 
-      const responseStatus =
+      responseStatus =
         typeof response?.status === 'string' ? response.status : null;
-      const orderId =
+      orderId =
         typeof (response as Record<string, unknown>)?.id === 'string'
           ? ((response as Record<string, unknown>).id as string)
           : null;
 
-      if (form.paymentMethod === 'online_card' && orderId && responseStatus === 'ok') {
-        const invoice = await createPaykeeperPayment({
-          orderId,
-          amount: Math.max(1, Math.trunc(latestCalculation.totalAmount)),
-          clientEmail: form.customer.email.trim() || undefined,
-          clientPhone: form.customer.phone.trim() || undefined,
-          description: `Оплата заказа ${orderId.slice(0, 8)} в магазине ANETTE`,
-        });
-        if (typeof window !== 'undefined') {
-          window.location.href = invoice.paymentUrl;
+      if (responseStatus === 'ok' && form.paymentMethod === 'online_card') {
+        try {
+          const invoice = await createPaykeeperPayment({
+            orderId: orderId!,
+            amount: Math.max(1, Math.trunc(orderTotal)),
+            clientEmail: form.customer.email.trim() || undefined,
+            clientPhone: form.customer.phone.trim() || undefined,
+            description: `Оплата заказа ${String(orderId ?? '').slice(0, 8)} в магазине ANETTE`,
+          });
+          if (invoice && typeof (invoice as Record<string, unknown>).paymentUrl === 'string') {
+            if (typeof window !== 'undefined') {
+              const targetUrl = (invoice as Record<string, unknown>).paymentUrl as string;
+              window.location.href = targetUrl;
+              return;
+            }
+          } else {
+            const raw = JSON.stringify(invoice ?? {});
+            throw new Error(
+              `Не удалось получить ссылку на оплату. Ответ платежки: ${raw.slice(0, 200)}`,
+            );
+          }
+        } catch (pkError) {
+          const pkMessage =
+            pkError instanceof Error ? pkError.message : 'Не удалось создать платеж.';
+          setOrderError(pkMessage);
+          setOrderResponse(null);
           return;
         }
       }
 
       if (responseStatus !== 'ok') {
-        setOrderError('Заказ не подтвердился. Проверь ответ ниже.');
+        const details =
+          typeof (response as Record<string, unknown> | null)?.message === 'string'
+            ? ((response as Record<string, unknown>).message as string)
+            : '';
+        setOrderError(
+          'Заказ не подтвердился.' + (details ? ` ${details}` : ''),
+        );
       }
     } catch (submitError) {
       const message =
@@ -1302,7 +1328,22 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
             </div>
 
             {error ? <p className={styles.errorText}>{error}</p> : null}
-            {orderError ? <p className={styles.errorText}>{orderError}</p> : null}
+            {orderError ? (
+              <div className={styles.successBanner} style={{borderColor:'rgba(215, 31, 31, 0.35)', background:'rgba(215,31,31,0.07)', color:'#8b1212'}}>
+                <p className={styles.successBannerTitle} style={{color:'#7a1010'}}>Не удалось оформить заказ</p>
+                <p className={styles.successBannerText} style={{color:'#8b1212'}}>{orderError}</p>
+              </div>
+            ) : null}
+            {isOrderSuccessful && !orderError ? (
+              <div className={styles.successBanner}>
+                <p className={styles.successBannerTitle}>Заявка отправлена</p>
+                <p className={styles.successBannerText}>
+                  {form.paymentMethod === 'online_card'
+                    ? 'Сейчас вы будете перенаправлены на страницу оплаты. После успешной оплаты мы вернем вас на сайт.'
+                    : 'Мы свяжемся с вами в ближайшее время для подтверждения и согласования доставки. Спасибо за заказ!'}
+                </p>
+              </div>
+            ) : null}
             {getCompatibilityMessage(calculation) ? (
               <p className={styles.noteText}>{getCompatibilityMessage(calculation)}</p>
             ) : null}
