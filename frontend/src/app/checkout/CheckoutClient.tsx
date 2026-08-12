@@ -835,12 +835,23 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
         setForm(resolvedForm);
       }
 
-      const latestCalculation = await runCalculation(
-        buildCalculationPayload(resolvedForm, { registerInLoyaltyProgram }),
-        {
-          persistError: false,
-        },
-      );
+      let latestCalculation: CheckoutCalculationResponse | null = null;
+      try {
+        latestCalculation = await runCalculation(
+          buildCalculationPayload(resolvedForm, { registerInLoyaltyProgram }),
+          {
+            persistError: false,
+          },
+        );
+      } catch (calcError) {
+        const isTimeout =
+          (calcError instanceof Error && calcError.name === 'AbortError') ||
+          (calcError instanceof Error && /долго отвечает|timeout|timed out|AbortError/i.test(calcError.message));
+        if (!isTimeout) {
+          throw calcError;
+        }
+        latestCalculation = null;
+      }
 
       const orderTotal =
         latestCalculation?.totalAmount ??
@@ -894,10 +905,19 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
         } catch (pkError) {
           let pkMessage =
             pkError instanceof Error ? pkError.message : 'Не удалось создать платеж.';
-          if (pkMessage.toLowerCase().includes('paykeeper')) {
-            pkMessage = pkMessage.replace(/paykeeper[^a-zа-я0-9]*/gi, 'Платежная система').replace(/Платежная система\s+/gi, 'Платежная система ');
+          const hasSensitiveName = /paykeeper|maxma|onek|onec|tilda|1с/i.test(pkMessage);
+          let debugJson: string | null = null;
+          try {
+            debugJson = JSON.stringify(pkError instanceof Error ? {name: pkError.name, message: pkError.message, stack: pkError.stack} : pkError);
+          } catch {
+            debugJson = null;
           }
-          setOrderError(pkMessage);
+          if (hasSensitiveName) {
+            pkMessage = pkMessage.replace(/paykeeper[^a-zа-я0-9]*/gi, 'Платежная система').replace(/Платежная система\s+/gi, 'Платежная система ');
+            pkMessage = pkMessage.replace(/maxma[^a-zа-я0-9]*/gi, 'Сервис скидок ').replace(/Сервис скидок\s+/gi, 'Сервис скидок ');
+          }
+          const extra = debugJson && debugJson.length > 20 ? `\n\nПодробности: ${debugJson.slice(0, 800)}` : '';
+          setOrderError(pkMessage + extra);
           setOrderResponse(null);
           setPaymentRedirectUrl(null);
           return;
@@ -909,8 +929,12 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
           typeof (response as Record<string, unknown> | null)?.message === 'string'
             ? ((response as Record<string, unknown>).message as string)
             : '';
+        let raw = '';
+        try {
+          raw = JSON.stringify(response).slice(0, 800);
+        } catch {}
         setOrderError(
-          'Заказ не подтвердился.' + (details ? ` ${details}` : ''),
+          'Заказ не подтвердился.' + (details ? ` ${details}` : '') + (raw.length > 20 ? `\n\nПодробности: ${raw}` : ''),
         );
       }
     } catch (submitError) {
@@ -918,7 +942,16 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
         submitError instanceof Error
           ? submitError.message
           : 'Не удалось оформить заказ.';
-      setOrderError(message);
+      let extra = '';
+      try {
+        const obj =
+          submitError instanceof Error
+            ? { name: submitError.name, message: submitError.message, stack: submitError.stack }
+            : submitError;
+        const raw = JSON.stringify(obj).slice(0, 800);
+        if (raw.length > 20) extra = `\n\nПодробности: ${raw}`;
+      } catch {}
+      setOrderError(message + extra);
       setOrderResponse(null);
     } finally {
       setIsSubmitting(false);

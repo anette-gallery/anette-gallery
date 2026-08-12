@@ -576,6 +576,7 @@
   font-size: 14px;
   line-height: 1.5;
   color: #185e37;
+  white-space: pre-wrap;
 }
 
 @media (max-width: 980px) {
