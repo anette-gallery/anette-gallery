@@ -687,7 +687,15 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     options: { persistError?: boolean } = {},
   ) {
     const requestId = ++calculationRequestIdRef.current;
-    const response = await calculateCheckout(payload);
+    let response: CheckoutCalculationResponse | null = null;
+    try {
+      response = await calculateCheckout(payload);
+    } finally {
+      if (requestId === calculationRequestIdRef.current) {
+        setIsCalculating(false);
+        setCalculationProgressLabel(null);
+      }
+    }
 
     if (requestId !== calculationRequestIdRef.current) {
       return response;
