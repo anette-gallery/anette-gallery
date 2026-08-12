@@ -855,6 +855,11 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
           : null;
 
       if (responseStatus === 'ok' && form.paymentMethod === 'online_card') {
+        if (!orderId) {
+          setOrderError('Не удалось получить ID заказа для создания платежа. Попробуй чуть позже или выбери оплату при получении.');
+          setOrderResponse(null);
+          return;
+        }
         try {
           const invoice = await createPaykeeperPayment({
             orderId: orderId!,

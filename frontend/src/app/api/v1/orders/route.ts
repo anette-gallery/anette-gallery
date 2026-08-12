@@ -396,13 +396,17 @@ export async function POST(request: Request) {
     requestLogId = requestLog.id;
 
     const result = await createOrder(payload);
+    const enriched =
+      result && typeof result === 'object' && !(result as Record<string, unknown>).id
+        ? ({ ...(result as Record<string, unknown>), id: requestLog.id } as Record<string, unknown>)
+        : result;
     await finalizeOrderRequest(
       requestLogId,
       result,
       typeof result?.status === 'string' ? result.status : 'processed',
     );
 
-    return jsonResponse(result);
+    return jsonResponse(enriched);
   } catch (error) {
     await finalizeOrderRequest(
       requestLogId,
