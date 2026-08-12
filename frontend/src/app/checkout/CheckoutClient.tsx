@@ -573,7 +573,9 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     hasStaleCalculation || !calculation ? subtotal : (calculation.total ?? calculation.totalAmount);
   const orderStatus =
     typeof orderResponse?.status === 'string' ? orderResponse.status : null;
-  const isOrderSuccessful = orderStatus === 'ok';
+  const isOrderSuccessful =
+    orderStatus === 'ok' &&
+    (form.paymentMethod === 'cash_on_delivery' || Boolean(paymentRedirectUrl));
   const deliveryOption = getDeliveryOption(form.deliveryMethod);
   const addressSummary =
     buildAddress(form.customer) ?? 'Россия, Москва';
