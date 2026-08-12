@@ -112,10 +112,11 @@ export async function createPaykeeperInvoice(
     (payload.clientId || '').trim() ||
     `order-${payload.orderId}`;
 
-  const params: PaykeeperInvoiceParams = {
+  const params: PaykeeperInvoiceParams & { token?: string } = {
     pay_amount: amount.toFixed(2),
     clientid: clientId.substring(0, 255),
     orderid: String(payload.orderId).substring(0, 255),
+    token,
   };
   if (payload.clientEmail) {
     params.client_email = payload.clientEmail;
@@ -135,21 +136,20 @@ export async function createPaykeeperInvoice(
   if (paykeeper.notifyPath) {
     const { frontendPublicUrl } = getConfig();
     const notifyBase =
-      frontendPublicUrl || `https://${process.env.VERCEL_URL || 'localhost:3000'}`;
-    params.notification_url = buildAbsoluteUrl(notifyBase, paykeeper.notifyPath)
-      .toString();
+      frontendPublicUrl ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    try {
+      params.notification_url = buildAbsoluteUrl(notifyBase, paykeeper.notifyPath).toString();
+    } catch {
+      const trimmedBase = notifyBase.replace(/\/+$/, '');
+      const trimmedPath = paykeeper.notifyPath.replace(/^\/+/, '');
+      params.notification_url = `${trimmedBase}/${trimmedPath}`;
+    }
   }
 
-  const query = new URLSearchParams({
-    token,
-  }).toString();
-  const url = buildAbsoluteUrl(
-    paykeeper.baseUrl,
-    `/change/invoice/preview/${query ? `?${query}` : ''}`,
-  );
-
+  const url = buildAbsoluteUrl(paykeeper.baseUrl, '/change/invoice/preview/');
   const body = encodeQuery(params as Record<string, string>);
-  const response = await fetch(url.toString(), {
+  const rawResp = await fetch(url.toString(), {
     method: 'POST',
     headers: {
       Authorization: basicAuthHeader(paykeeper.username, paykeeper.password),
@@ -158,19 +158,64 @@ export async function createPaykeeperInvoice(
     },
     body,
   });
-  await assertOkStatus(response, 'paykeeper create-invoice');
-  const data = (await parseJsonOrThrow(
-    response,
-    'paykeeper create-invoice',
-  )) as { invoice_id?: string; invoice_url?: string; expiry?: string };
-  if (!data?.invoice_id || !data?.invoice_url) {
-    throw new ApiCallError(502, 'Paykeeper did not return invoice id/url');
+
+  let rawData: unknown = null;
+  const text = await rawResp.text().catch(() => '');
+  try {
+    rawData = text ? JSON.parse(text) : null;
+  } catch {
+    rawData = { rawText: text.substring(0, 400) };
   }
+
+  if (!rawResp.ok) {
+    const msg =
+      rawData && typeof rawData === 'object' && 'msg' in rawData && typeof (rawData as { msg: unknown }).msg === 'string'
+        ? (rawData as { msg: string }).msg
+        : `HTTP ${rawResp.status}`;
+    throw new ApiCallError(
+      rawResp.status,
+      `Paykeeper create-invoice failed: ${msg}`,
+      'paykeeper_invoice_create',
+    );
+  }
+
+  const data = rawData as {
+    invoice_id?: string;
+    invoiceid?: string;
+    id?: string;
+    result?: { invoice_id?: string; id?: string };
+    error?: string;
+    msg?: string;
+    message?: string;
+    [key: string]: unknown;
+  } | null;
+
+  const invoiceId =
+    data && typeof data === 'object'
+      ? (String(data.invoice_id ?? data.invoiceid ?? data.id ?? data.result?.invoice_id ?? data.result?.id ?? '').trim() || null)
+      : null;
+
+  if (!invoiceId) {
+    const details =
+      data && typeof data === 'object'
+        ? JSON.stringify(data).slice(0, 400)
+        : String(rawData ?? '').slice(0, 400);
+    throw new ApiCallError(
+      502,
+      `Paykeeper did not return invoice id. Response: ${details}`,
+      'paykeeper_invoice_missing_id',
+    );
+  }
+
+  const paymentUrl = buildAbsoluteUrl(paykeeper.baseUrl, `/bill/${encodeURIComponent(invoiceId)}/`)
+    .toString();
+  const rawExpiry =
+    data && typeof data === 'object' && 'expiry' in data ? (data as { expiry: unknown }).expiry : undefined;
   return {
     status: 'ok',
-    invoiceId: String(data.invoice_id),
-    paymentUrl: String(data.invoice_url),
-    expiresAt: data.expiry ? String(data.expiry) : undefined,
+    invoiceId: String(invoiceId),
+    paymentUrl,
+    expiresAt: rawExpiry !== null && rawExpiry !== undefined ? String(rawExpiry) : undefined,
   };
 }
 
