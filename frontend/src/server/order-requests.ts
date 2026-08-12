@@ -36,6 +36,18 @@ async function ensureOrderRequestsTable() {
     );
   `);
   await query(`
+    ALTER TABLE order_requests ADD COLUMN IF NOT EXISTS payment_method VARCHAR(32);
+  `).catch(() => {});
+  await query(`
+    ALTER TABLE order_requests ADD COLUMN IF NOT EXISTS payment_status VARCHAR(32);
+  `).catch(() => {});
+  await query(`
+    ALTER TABLE order_requests ADD COLUMN IF NOT EXISTS payment_invoice_id VARCHAR(255);
+  `).catch(() => {});
+  await query(`
+    ALTER TABLE order_requests ADD COLUMN IF NOT EXISTS payment_payload JSONB NOT NULL DEFAULT '{}'::jsonb;
+  `).catch(() => {});
+  await query(`
     CREATE INDEX IF NOT EXISTS idx_order_requests_created_at
     ON order_requests(created_at DESC);
   `);
