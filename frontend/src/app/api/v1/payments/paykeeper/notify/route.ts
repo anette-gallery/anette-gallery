@@ -5,7 +5,6 @@ import {
   optionsResponse,
   readFormDataOrJson,
 } from '@/server/http';
-import { logger } from '@/server/logger';
 import {
   parsePaykeeperNotify,
   verifyPaykeeperNotifySignature,
@@ -28,29 +27,23 @@ export async function POST(request: Request) {
     const body = raw && typeof raw === 'object' ? raw : {};
 
     if (!verifyPaykeeperNotifySignature(body as Record<string, unknown>)) {
-      logger.warn('paykeeper notify: signature mismatch', { body });
-      return errorResponse(400, {
+      return errorResponse(400, 'Invalid paykeeper signature', {
         status: 'bad_signature',
-        message: 'Invalid paykeeper signature',
       });
     }
 
     const payload = parsePaykeeperNotify(body);
     if (!payload || !payload.orderid) {
-      logger.warn('paykeeper notify: invalid payload', { body });
-      return errorResponse(400, {
+      return errorResponse(400, 'Invalid payload from paykeeper', {
         status: 'bad_payload',
-        message: 'Invalid payload from paykeeper',
       });
     }
 
     const orderId = payload.orderid;
     const existing = await findOrderRequestById(orderId);
     if (!existing) {
-      logger.warn('paykeeper notify: order not found', { orderId });
-      return errorResponse(404, {
+      return errorResponse(404, 'Order not found', {
         status: 'not_found',
-        message: 'Order not found',
       });
     }
 
@@ -76,13 +69,6 @@ export async function POST(request: Request) {
       ...(orderStatus ? { status: orderStatus } : {}),
     });
 
-    logger.info('paykeeper notify: processed', {
-      orderId,
-      sum: payload.sum,
-      paykeeperId: payload.id,
-      paymentStatus,
-    });
-
     return jsonResponse({
       status: 'ok',
       action: 'paykeeper-notify',
@@ -90,10 +76,8 @@ export async function POST(request: Request) {
       paymentStatus,
     });
   } catch (error) {
-    logger.error('paykeeper notify error', { error });
-    return errorResponse(500, {
+    return errorResponse(500, 'Internal error processing paykeeper notify', {
       status: 'error',
-      message: 'Internal error processing paykeeper notify',
     });
   }
 }

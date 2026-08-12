@@ -387,6 +387,12 @@ export async function POST(request: Request) {
   try {
     const payload = parseCreateOrderPayload(await readJson(request));
     const requestLog = await saveOrderRequest(payload);
+    if (!requestLog.saved) {
+      return errorResponse(500, 'Не удалось сохранить запрос', {
+        source: requestLog.source,
+        reason: requestLog.reason,
+      });
+    }
     requestLogId = requestLog.id;
 
     const result = await createOrder(payload);

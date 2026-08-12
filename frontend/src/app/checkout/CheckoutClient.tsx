@@ -296,10 +296,10 @@ function buildOrderPayload(
     totalAmount,
     items: form.items.map((item) => ({
       sku: item.sku.trim(),
-      title: item.title?.trim() || undefined,
+      title: (item.title ?? '').trim() || undefined,
       image: item.image?.trim() || undefined,
       quantity: Math.max(1, Math.trunc(item.quantity || 1)),
-      unitPrice: Math.max(0, Number(item.price || 0)),
+      price: Math.max(0, Number(item.price || 0)),
     })),
   };
 }
@@ -352,7 +352,7 @@ function hasEffectiveDiscount(
   }
 
   const { totalDiscount, prepaidAmount } = getDiscountBreakdown(result);
-  const discountAmount = Math.max(0, subtotal - result.total);
+  const discountAmount = Math.max(0, subtotal - (result.total ?? result.totalAmount) as number);
 
   return discountAmount > 0 || totalDiscount > 0 || prepaidAmount > 0;
 }
@@ -365,7 +365,7 @@ function getCalculationStatusMessage(
     return null;
   }
 
-  const discountAmount = Math.max(0, subtotal - result.total);
+  const discountAmount = Math.max(0, subtotal - (result.total ?? result.totalAmount) as number);
   const hasDiscounts = hasEffectiveDiscount(result, subtotal);
   const hasRegisteredInLoyalty = Boolean(result.payload.registerInLoyaltyProgram);
   const hasPromo = Boolean(getPromocodeLabel(result)) && hasDiscounts;
@@ -374,19 +374,19 @@ function getCalculationStatusMessage(
 
   if (discountAmount > 0) {
     return hasRegisteredInLoyalty
-      ? `Скидка программы лояльности применена. Экономия ${formatCurrency(discountAmount)}, итоговая сумма ${formatCurrency(result.total)}.`
-      : `Скидка применена. Экономия ${formatCurrency(discountAmount)}, итоговая сумма ${formatCurrency(result.total)}.`;
+      ? `Скидка программы лояльности применена. Экономия ${formatCurrency(discountAmount)}, итоговая сумма ${formatCurrency((result.total ?? result.totalAmount) as number)}.`
+      : `Скидка применена. Экономия ${formatCurrency(discountAmount)}, итоговая сумма ${formatCurrency((result.total ?? result.totalAmount) as number)}.`;
   }
 
   if (hasPromo || hasGiftCards || hasDiscounts) {
-    return `Проверка выполнена. Итоговая сумма: ${formatCurrency(result.total)}.`;
+    return `Проверка выполнена. Итоговая сумма: ${formatCurrency((result.total ?? result.totalAmount) as number)}.`;
   }
 
   if (hasRegisteredInLoyalty) {
-    return `Регистрация в программе лояльности отправлена. Сейчас итоговая сумма: ${formatCurrency(result.total)}.`;
+    return `Регистрация в программе лояльности отправлена. Сейчас итоговая сумма: ${formatCurrency((result.total ?? result.totalAmount) as number)}.`;
   }
 
-  return `Скидка не найдена. MAXMA вернула 0 ₽ скидки и 0 ₽ бонусов, итоговая сумма без изменений: ${formatCurrency(result.total)}.`;
+  return `Скидка не найдена. MAXMA вернула 0 ₽ скидки и 0 ₽ бонусов, итоговая сумма без изменений: ${formatCurrency((result.total ?? result.totalAmount) as number)}.`;
 }
 
 function shouldOfferLoyaltyRegistration(
@@ -402,7 +402,7 @@ function shouldOfferLoyaltyRegistration(
   }
 
   const { totalDiscount, prepaidAmount } = getDiscountBreakdown(result);
-  const discountAmount = Math.max(0, subtotal - result.total);
+  const discountAmount = Math.max(0, subtotal - (result.total ?? result.totalAmount) as number);
   const hasPromo = Boolean(getPromocodeLabel(result));
   const hasGiftCards = Array.isArray(result.giftCards) && result.giftCards.length > 0;
   const loyalty = isRecord(result.loyalty) ? result.loyalty : null;
@@ -429,7 +429,7 @@ function getCalculationSourceMessage(
   }
 
   const { totalDiscount, prepaidAmount } = getDiscountBreakdown(result);
-  const discountAmount = Math.max(0, subtotal - result.total);
+  const discountAmount = Math.max(0, subtotal - (result.total ?? result.totalAmount) as number);
   const hasActualDiscount = hasEffectiveDiscount(result, subtotal);
   const promoLabel = getPromocodeLabel(result);
   const hasPromo = Boolean(promoLabel) && hasActualDiscount;
@@ -470,7 +470,7 @@ function getAcceptedCalculationMessage(
   }
 
   const { totalDiscount, prepaidAmount } = getDiscountBreakdown(result);
-  const discountAmount = Math.max(0, subtotal - result.total);
+  const discountAmount = Math.max(0, subtotal - (result.total ?? result.totalAmount) as number);
   const hasActualDiscount = hasEffectiveDiscount(result, subtotal);
   const promoLabel = getPromocodeLabel(result);
   const hasPromo = Boolean(promoLabel) && hasActualDiscount;
@@ -565,7 +565,7 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
   );
   const hasStaleCalculation = Boolean(calculation) && lastCalculatedKey !== calculationKey;
   const total =
-    hasStaleCalculation || !calculation ? subtotal : calculation.total;
+    hasStaleCalculation || !calculation ? subtotal : (calculation.total ?? calculation.totalAmount);
   const orderStatus =
     typeof orderResponse?.status === 'string' ? orderResponse.status : null;
   const isOrderSuccessful = orderStatus === 'ok';
@@ -824,7 +824,7 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
         },
       );
       const response = await createOrder(
-        buildOrderPayload(resolvedForm, latestCalculation.total),
+        buildOrderPayload(resolvedForm, latestCalculation.totalAmount),
       );
 
       setOrderResponse(response);
@@ -839,7 +839,7 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
       if (form.paymentMethod === 'online_card' && orderId && responseStatus === 'ok') {
         const invoice = await createPaykeeperPayment({
           orderId,
-          amount: Math.max(1, Math.trunc(latestCalculation.total)),
+          amount: Math.max(1, Math.trunc(latestCalculation.totalAmount)),
           clientEmail: form.customer.email.trim() || undefined,
           clientPhone: form.customer.phone.trim() || undefined,
           description: `Оплата заказа ${orderId.slice(0, 8)} в магазине ANETTE`,

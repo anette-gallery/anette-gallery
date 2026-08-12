@@ -110,9 +110,9 @@ export async function POST(request: Request) {
           location: 'webhooks/tilda/order:POST',
           msg: '[DEBUG] Tilda webhook normalized payload',
           data: {
-            customerPhone: normalizedPayload.customer.phone ?? null,
-            customerEmail: normalizedPayload.customer.email ?? null,
-            itemsCount: normalizedPayload.items.length,
+            customerPhone: normalizedPayload.customer?.phone ?? null,
+            customerEmail: normalizedPayload.customer?.email ?? null,
+            itemsCount: (normalizedPayload.items ?? []).length,
             totalAmount: normalizedPayload.totalAmount,
           },
           ts: Date.now(),
@@ -155,7 +155,7 @@ export async function POST(request: Request) {
           data: {
             orderReady: Boolean(orderPreview),
             leadSaved: lead.saved,
-            leadId: lead.id ?? null,
+            leadId: lead.saved ? lead.id : null,
           },
           ts: Date.now(),
         }),

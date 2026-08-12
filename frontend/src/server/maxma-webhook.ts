@@ -4,6 +4,7 @@ import { getAppConfig } from '@/server/config';
 import { isDatabaseConfigured, query } from '@/server/database';
 import type {
   MaxmaWebhookEvent,
+  MaxmaWebhookEventPayload,
   MaxmaWebhookListItem,
   MaxmaWebhookSaveResult,
 } from '@/types/api';
@@ -145,19 +146,23 @@ export async function saveMaxmaWebhookEvents(
   events: MaxmaWebhookEvent[],
 ): Promise<MaxmaWebhookSaveResult[]> {
   if (!isDatabaseConfigured()) {
-    return events.map((event) => ({
-      accepted: true,
-      duplicate: false,
-      eventId: event.eventId,
-      event: event.event,
-    }));
+    return events.map((event) => {
+      const ev = event as unknown as MaxmaWebhookEventPayload;
+      return {
+        accepted: true,
+        duplicate: false,
+        eventId: ev.eventId,
+        event: ev.event,
+      };
+    });
   }
 
   await ensureMaxmaWebhookEventsTable();
 
   const results: MaxmaWebhookSaveResult[] = [];
 
-  for (const event of events) {
+  for (const rawEvent of events) {
+    const event = rawEvent as unknown as MaxmaWebhookEventPayload;
     const rows = await query<{ inserted: boolean }>(
       `
         INSERT INTO maxma_webhook_events (
@@ -207,11 +212,14 @@ function toMaxmaWebhookListItem(row: MaxmaWebhookEventRow): MaxmaWebhookListItem
   return {
     id: row.id,
     eventId: row.event_id,
+    eventType: row.event_code,
     event: row.event_code,
     eventTime: row.event_time,
     source: row.source_system,
     payload: row.event_payload,
+    processed: false,
     receivedAt: row.received_at,
+    createdAt: row.received_at,
   };
 }
 

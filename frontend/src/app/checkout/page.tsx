@@ -116,7 +116,7 @@ function buildInitialForm(searchParams: SearchParamsInput) {
   const paramItems = parseItems(readString(searchParams.items));
   const items = cartItems.length > 0 ? cartItems : paramItems;
   const rawPayment = readString(searchParams.paymentMethod);
-  const paymentMethod =
+  const paymentMethod: 'cash_on_delivery' | 'online_card' =
     rawPayment === 'online_card' || rawPayment === 'cash_on_delivery'
       ? rawPayment
       : 'cash_on_delivery';

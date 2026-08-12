@@ -160,6 +160,7 @@ function normalizeOrderItem(
     title,
     quantity,
     unitPrice,
+    price: unitPrice,
   };
 }
 
@@ -193,11 +194,11 @@ export function parseTildaOrderPayload(input: unknown): CreateOrderPayload {
 function toCreateOrderCandidate(payload: TildaLeadPayload) {
   return {
     customer: {
-      fullName: payload.customer.fullName ?? 'Покупатель с Tilda',
-      phone: payload.customer.phone,
-      email: payload.customer.email,
+      fullName: payload.customer?.fullName ?? 'Покупатель с Tilda',
+      phone: payload.customer?.phone ?? '',
+      email: payload.customer?.email ?? undefined,
     },
-    items: payload.items,
+    items: payload.items ?? [],
     totalAmount: payload.totalAmount,
     promoCode: payload.promoCode,
     giftCardNumber: payload.giftCardNumber,
@@ -304,10 +305,10 @@ export function normalizeTildaLeadPayload(input: unknown): TildaLeadPayload {
 
 export function isEmptyTildaLeadPayload(payload: TildaLeadPayload): boolean {
   return (
-    !payload.customer.fullName &&
-    !payload.customer.phone &&
-    !payload.customer.email &&
-    payload.items.length === 0 &&
+    !payload.customer?.fullName &&
+    !payload.customer?.phone &&
+    !payload.customer?.email &&
+    (payload.items?.length ?? 0) === 0 &&
     payload.totalAmount === 0 &&
     !payload.comment
   );
@@ -316,7 +317,7 @@ export function isEmptyTildaLeadPayload(payload: TildaLeadPayload): boolean {
 export function toCreateOrderPayload(
   payload: TildaLeadPayload,
 ): CreateOrderPayload | null {
-  if (!payload.customer.fullName || !payload.customer.phone || payload.items.length === 0) {
+  if (!payload.customer?.fullName || !payload.customer?.phone || (payload.items?.length ?? 0) === 0) {
     return null;
   }
 

@@ -172,7 +172,7 @@ function buildOrderCalculationQuery(payload: CreateOrderPayload) {
       id: `${index + 1}`,
       product: {
         sku: item.sku,
-        blackPrice: item.unitPrice,
+        blackPrice: (item as unknown as { unitPrice?: number }).unitPrice ?? item.price ?? 0,
       },
       qty: item.quantity,
     })),

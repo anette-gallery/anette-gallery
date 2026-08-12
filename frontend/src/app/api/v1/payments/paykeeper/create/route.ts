@@ -15,7 +15,6 @@ import {
   findOrderRequestById,
   setOrderRequestPayment,
 } from '@/server/order-requests';
-import { logger } from '@/server/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -53,15 +52,8 @@ export async function POST(request: Request) {
       },
     });
 
-    logger.info('paykeeper invoice created', {
-      orderId: payload.orderId,
-      invoiceId: invoice.invoiceId,
-      amount: payload.amount,
-    });
-
     return jsonResponse(invoice);
   } catch (error) {
-    logger.error('paykeeper create error', { error });
     if (error instanceof ZodError) {
       return errorResponse(400, 'Некорректные параметры запроса', error.flatten?.().fieldErrors ?? error.message);
     }

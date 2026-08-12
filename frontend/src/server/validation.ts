@@ -278,6 +278,14 @@ function parseOrderItem(value: unknown, index: number): OrderItem {
     throw new Error(`Товар заказа #${index + 1} должен быть объектом`);
   }
 
+  const rawUnitPrice =
+    value.unitPrice !== undefined && value.unitPrice !== null
+      ? value.unitPrice
+      : value.price;
+  const unitPrice = expectNumber(rawUnitPrice, `items[${index}].unitPrice`, {
+    min: 0,
+  })!;
+
   return {
     sku: expectString(value.sku, `items[${index}].sku`, { maxLength: 64 })!,
     title: expectString(value.title, `items[${index}].title`, {
@@ -292,9 +300,8 @@ function parseOrderItem(value: unknown, index: number): OrderItem {
       min: 1,
       integer: true,
     })!,
-    unitPrice: expectNumber(value.unitPrice, `items[${index}].unitPrice`, {
-      min: 0,
-    })!,
+    unitPrice,
+    price: unitPrice,
   };
 }
 

@@ -4,6 +4,8 @@ export type PaymentMethod = 'cash_on_delivery' | 'online_card';
 
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'cancelled';
 
+export type IntegrationMode = 'live' | 'stub';
+
 export const CheckoutFormCustomerSchema = z.object({
   fullName: z.string().trim().min(2, 'Укажите имя и фамилию').max(150),
   phone: z
@@ -11,9 +13,29 @@ export const CheckoutFormCustomerSchema = z.object({
     .trim()
     .min(10, 'Телефон заполнен некорректно')
     .max(30),
-  email: z.string().trim().max(200).email('E-mail заполнен некорректно'),
+  email: z
+    .string()
+    .trim()
+    .max(200)
+    .email('E-mail заполнен некорректно')
+    .optional()
+    .nullable(),
   address: z.string().trim().max(500).optional().nullable(),
 });
+
+export type OrderCustomer = z.infer<typeof CheckoutFormCustomerSchema> & {
+  email?: string | null;
+};
+
+export type SyncCustomerPayload = OrderCustomer & {
+  fullName: string;
+  phone: string;
+  email?: string;
+  address?: string | null;
+  loyaltyCardNumber?: string;
+  consentAccepted?: boolean;
+  source?: string;
+};
 
 export const CheckoutItemSchema = z.object({
   sku: z.string().trim().min(1).max(255),
@@ -22,6 +44,10 @@ export const CheckoutItemSchema = z.object({
   quantity: z.coerce.number().int().min(1).max(999999),
   price: z.coerce.number().finite().min(0).max(1_000_000_000),
 });
+
+export type CheckoutItemInput = z.infer<typeof CheckoutItemSchema> & {
+  unitPrice?: number;
+};
 
 export const CalculateCheckoutPayloadSchema = z.object({
   phone: z.string().trim().max(30).optional(),
@@ -53,17 +79,27 @@ export type SyncCatalogItemPayload = {
   subtitle?: string;
   description?: string;
   brand?: string;
-  images?: Array<{
-    url: string;
-    title?: string;
-    alt?: string;
-  }>;
+  collection?: string;
+  color?: string;
+  colorCode?: string;
+  size?: string;
+  material?: string;
+  country?: string;
+  images?:
+    | Array<{
+        url: string;
+        title?: string;
+        alt?: string;
+      }>
+    | Array<string>
+    | string;
   price?: number;
   oldPrice?: number;
   currency?: string;
   category?: string;
   section?: string;
   weightKg?: number;
+  volumeLiters?: number;
   dimensionsCm?: {
     length?: number;
     width?: number;
@@ -77,6 +113,8 @@ export type SyncCatalogItemPayload = {
     sku: string;
     price?: number;
     quantity?: number;
+    color?: string;
+    size?: string;
     attributes?: Array<{
       name: string;
       value: string;
@@ -86,6 +124,12 @@ export type SyncCatalogItemPayload = {
   availability?: 'in_stock' | 'preorder' | 'out_of_stock';
   showOnSite?: boolean;
   preorderDays?: number;
+  manualOverrideFields?: string[];
+  preserveTildaOverrides?: boolean;
+  sourceUpdatedAt?: string;
+  tildaUpdatedAt?: string;
+  missingInOneC?: boolean;
+  [key: string]: unknown;
 };
 
 export const SyncCatalogItemPayloadSchema: z.ZodType<SyncCatalogItemPayload> =
@@ -96,14 +140,19 @@ export const SyncCatalogItemPayloadSchema: z.ZodType<SyncCatalogItemPayload> =
     description: z.string().trim().max(20000).optional(),
     brand: z.string().trim().max(255).optional(),
     images: z
-      .array(
-        z.object({
-          url: z.string().trim().url().max(500),
-          title: z.string().trim().max(255).optional(),
-          alt: z.string().trim().max(255).optional(),
-        }),
-      )
-      .max(100)
+      .union([
+        z
+          .array(
+            z.object({
+              url: z.string().trim().url().max(500),
+              title: z.string().trim().max(255).optional(),
+              alt: z.string().trim().max(255).optional(),
+            }),
+          )
+          .max(100),
+        z.array(z.string().trim().url().max(500)).max(100),
+        z.string().trim().url().max(500),
+      ])
       .optional(),
     price: z.coerce.number().finite().min(0).max(1_000_000_000).optional(),
     oldPrice: z.coerce.number().finite().min(0).max(1_000_000_000).optional(),
@@ -150,6 +199,11 @@ export const SyncCatalogItemPayloadSchema: z.ZodType<SyncCatalogItemPayload> =
     availability: z.enum(['in_stock', 'preorder', 'out_of_stock']).optional(),
     showOnSite: z.boolean().optional(),
     preorderDays: z.coerce.number().int().min(0).max(3650).optional(),
+    manualOverrideFields: z.array(z.string()).optional(),
+    preserveTildaOverrides: z.boolean().optional(),
+    sourceUpdatedAt: z.string().trim().max(100).optional(),
+    tildaUpdatedAt: z.string().trim().max(100).optional(),
+    missingInOneC: z.boolean().optional(),
   });
 
 export const MAXMA_ERROR_SCHEMA = z.object({
@@ -171,6 +225,13 @@ export const CheckoutCalculateResponseSchema = z.object({
       finalAmount: z.coerce.number().finite().optional(),
     }),
   ),
+  compatibility: z
+    .object({
+      isCompatible: z.boolean().default(true),
+      message: z.string().max(10000).optional().nullable(),
+      issues: z.array(z.string()).default([]),
+    })
+    .optional(),
   discountApplied: z.boolean(),
   discountSource: z
     .enum(['promo', 'gift_card', 'loyalty', 'none'])
@@ -189,7 +250,11 @@ export const CheckoutCalculateResponseSchema = z.object({
   giftCardNumber: z.string().optional().nullable(),
   errors: z.array(MAXMA_ERROR_SCHEMA).default([]),
   warnings: z.array(z.string()).default([]),
-});
+  total: z.coerce.number().finite().optional(),
+  giftCards: z.any().optional(),
+  loyalty: z.any().optional(),
+  payload: z.any().optional(),
+}).passthrough();
 
 export type CalculateCheckoutPayload = z.infer<
   typeof CalculateCheckoutPayloadSchema
@@ -213,6 +278,8 @@ export type CheckoutCalculation = z.infer<
   typeof CheckoutCalculateResponseSchema
 >;
 
+export type CheckoutCalculationResponse = CheckoutCalculation;
+
 export type CreateOrderPayload = z.infer<typeof CreateOrderPayloadSchema> & {
   paymentMethod?: PaymentMethod;
 };
@@ -223,6 +290,101 @@ export type SyncCatalogBatchPayload = {
   force?: boolean;
   resumeFromSku?: string;
 };
+
+export type TildaLeadPayload = {
+  name?: string;
+  phone?: string;
+  email?: string;
+  formname?: string;
+  Formname?: string;
+  subject?: string;
+  comments?: string;
+  Comments?: string;
+  payment?: string;
+  delivery?: string;
+  address?: string;
+  products?: string;
+  sum?: string;
+  recordid?: string;
+  RecordID?: string;
+  orderid?: string;
+  OrderID?: string;
+  promocode?: string;
+  customer?: {
+    fullName?: string;
+    phone?: string;
+    email?: string;
+    [key: string]: unknown;
+  };
+  items?: Array<{
+    sku?: string;
+    title?: string;
+    quantity?: number;
+    unitPrice?: number;
+    price?: number;
+    [key: string]: unknown;
+  }>;
+  totalAmount?: number;
+  deliveryMethod?: string;
+  comment?: string;
+  [key: string]: unknown;
+};
+
+export type LeadListItem = {
+  id: string;
+  source: string;
+  sourceSystem?: string;
+  formName?: string;
+  customerName?: string;
+  phone?: string;
+  email?: string;
+  comment?: string;
+  rawPayload: Record<string, unknown>;
+  processed: boolean;
+  processedAt?: string;
+  processingError?: string;
+  createdAt: string;
+  [key: string]: unknown;
+};
+
+export type LeadSaveResult =
+  | { saved: true; id: string; source?: string; processed?: boolean; status?: string }
+  | { saved: false; reason: string; source?: string; status?: string };
+
+export type MaxmaWebhookEventPayload = {
+  eventId?: string;
+  event?: string;
+  eventTime?: string | number;
+  source?: string;
+  payload?: unknown;
+  customer?: unknown;
+  client?: unknown;
+  [key: string]: unknown;
+};
+
+export type MaxmaWebhookEvent =
+  | MaxmaWebhookEventPayload
+  | MaxmaWebhookEventPayload[]
+  | Record<string, unknown>
+  | Array<Record<string, unknown>>;
+
+export type MaxmaWebhookListItem = {
+  id: string;
+  eventType: string;
+  eventId?: string;
+  event?: string;
+  payload: unknown;
+  processed: boolean;
+  processedAt?: string;
+  processingError?: string;
+  receivedAt: string;
+  createdAt: string;
+  [key: string]: unknown;
+};
+
+export type MaxmaWebhookSaveResult =
+  | { saved?: true; id?: string; reason?: string; accepted?: boolean; duplicate?: boolean; eventId?: string; event?: string; [key: string]: unknown }
+  | { saved?: false; reason?: string; id?: string; accepted?: boolean; duplicate?: boolean; eventId?: string; event?: string; [key: string]: unknown };
 
 export type CreatePaymentPayload = {
   orderId: string;
@@ -269,6 +431,7 @@ export type OrderItem = {
   image?: string;
   quantity: number;
   unitPrice: number;
+  price: number;
 };
 
 export type OrderRequestSaveResult =

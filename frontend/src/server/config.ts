@@ -43,6 +43,16 @@ export type AppConfig = {
       productUpsertPath: string | null;
       productBatchUpsertPath: string | null;
     };
+    paykeeper: {
+      baseUrl: string | null;
+      username: string | null;
+      password: string | null;
+      secret: string | null;
+      serverCallbackSecret: string | null;
+      successUrl: string | null;
+      failUrl: string | null;
+      notifyPath: string | null;
+    };
   };
 };
 
@@ -74,13 +84,15 @@ export function hasRealValue(value: string | null | undefined): boolean {
 }
 
 export function getAppConfig(): AppConfig {
+  const frontendPublicUrl = toOptionalString(process.env.FRONTEND_PUBLIC_URL);
+
   return {
     server: {
       port: toNumber(process.env.PORT, 3000),
       corsOrigin: process.env.CORS_ORIGIN?.trim() || '*',
     },
     frontend: {
-      publicUrl: toOptionalString(process.env.FRONTEND_PUBLIC_URL),
+      publicUrl: frontendPublicUrl,
     },
     database: {
       url: toOptionalString(process.env.DATABASE_URL),
@@ -112,30 +124,12 @@ export function getAppConfig(): AppConfig {
           toOptionalString(process.env.MAXMA_GIFT_CARD_VALIDATE_PATH) ??
           '/v2/calculate-purchase',
         orderCreatePath:
-        toOptionalString(process.env.MAXMA_ORDER_CREATE_PATH) ?? '/set-purchase',
-      confirmTicketPath:
-        toOptionalString(process.env.MAXMA_CONFIRM_TICKET_PATH) ??
-        '/confirm-ticket',
-    };
-    paykeeper: {
-      baseUrl: toOptionalString(process.env.PAYKEEPER_BASE_URL),
-      username: toOptionalString(process.env.PAYKEEPER_USERNAME),
-      password: toOptionalString(process.env.PAYKEEPER_PASSWORD),
-      secret: toOptionalString(process.env.PAYKEEPER_SECRET),
-      serverCallbackSecret: toOptionalString(
-        process.env.PAYKEEPER_SERVER_CALLBACK_SECRET,
-      ),
-      successUrl:
-        toOptionalString(process.env.PAYKEEPER_SUCCESS_URL) ??
-        `${toOptionalString(process.env.FRONTEND_PUBLIC_URL) ?? ''}/checkout/success`,
-      failUrl:
-        toOptionalString(process.env.PAYKEEPER_FAIL_URL) ??
-        `${toOptionalString(process.env.FRONTEND_PUBLIC_URL) ?? ''}/checkout/fail`,
-      notifyPath:
-        toOptionalString(process.env.PAYKEEPER_NOTIFY_PATH) ??
-        '/api/v1/payments/paykeeper/notify',
-    };
-  };
+          toOptionalString(process.env.MAXMA_ORDER_CREATE_PATH) ??
+          '/set-purchase',
+        confirmTicketPath:
+          toOptionalString(process.env.MAXMA_CONFIRM_TICKET_PATH) ??
+          '/confirm-ticket',
+      },
       onec: {
         baseUrl: toOptionalString(process.env.ONEC_API_URL),
         login: toOptionalString(process.env.ONEC_API_LOGIN),
@@ -158,6 +152,37 @@ export function getAppConfig(): AppConfig {
           toOptionalString(process.env.TILDA_PRODUCTS_BATCH_UPSERT_PATH) ??
           '/products/batch-upsert',
       },
+      paykeeper: {
+        baseUrl: toOptionalString(process.env.PAYKEEPER_BASE_URL),
+        username: toOptionalString(process.env.PAYKEEPER_USERNAME),
+        password: toOptionalString(process.env.PAYKEEPER_PASSWORD),
+        secret: toOptionalString(process.env.PAYKEEPER_SECRET),
+        serverCallbackSecret: toOptionalString(
+          process.env.PAYKEEPER_SERVER_CALLBACK_SECRET,
+        ),
+        successUrl:
+          toOptionalString(process.env.PAYKEEPER_SUCCESS_URL) ??
+          (frontendPublicUrl ? `${frontendPublicUrl}/checkout/success` : null),
+        failUrl:
+          toOptionalString(process.env.PAYKEEPER_FAIL_URL) ??
+          (frontendPublicUrl ? `${frontendPublicUrl}/checkout/fail` : null),
+        notifyPath:
+          toOptionalString(process.env.PAYKEEPER_NOTIFY_PATH) ??
+          '/api/v1/payments/paykeeper/notify',
+      },
     },
+  };
+}
+
+export type FlatConfig = {
+  frontendPublicUrl: string | null;
+  paykeeper: AppConfig['integrations']['paykeeper'];
+};
+
+export function getConfig(): FlatConfig {
+  const cfg = getAppConfig();
+  return {
+    frontendPublicUrl: cfg.frontend.publicUrl,
+    paykeeper: cfg.integrations.paykeeper,
   };
 }

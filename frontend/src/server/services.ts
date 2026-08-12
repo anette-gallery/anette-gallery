@@ -128,7 +128,7 @@ export async function createOrder(
   const customerSync = await syncCustomerInMaxma({
     fullName: payload.customer.fullName,
     phone: payload.customer.phone,
-    email: payload.customer.email,
+    email: payload.customer.email ?? undefined,
     address: payload.customer.address,
     loyaltyCardNumber: payload.loyaltyCardNumber,
   });

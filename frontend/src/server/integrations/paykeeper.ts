@@ -14,7 +14,6 @@ import {
   parseJsonOrThrow,
 } from '@/server/http';
 import { getConfig } from '@/server/config';
-import { logger } from '@/server/logger';
 
 type PaykeeperTokenResponse = {
   token: string;
@@ -34,7 +33,18 @@ type PaykeeperInvoiceParams = {
   expiry?: string;
 };
 
-function ensurePaykeeperCredentials() {
+type PaykeeperCredentials = {
+  baseUrl: string;
+  username: string;
+  password: string;
+  secret: string;
+  serverCallbackSecret: string | null;
+  successUrl: string | null;
+  failUrl: string | null;
+  notifyPath: string | null;
+};
+
+function ensurePaykeeperCredentials(): PaykeeperCredentials {
   const { paykeeper } = getConfig();
   if (
     !paykeeper.baseUrl ||
@@ -48,7 +58,16 @@ function ensurePaykeeperCredentials() {
       'paykeeper_not_configured',
     );
   }
-  return paykeeper;
+  return {
+    baseUrl: paykeeper.baseUrl,
+    username: paykeeper.username,
+    password: paykeeper.password,
+    secret: paykeeper.secret,
+    serverCallbackSecret: paykeeper.serverCallbackSecret,
+    successUrl: paykeeper.successUrl,
+    failUrl: paykeeper.failUrl,
+    notifyPath: paykeeper.notifyPath,
+  };
 }
 
 function basicAuthHeader(username: string, password: string): string {
