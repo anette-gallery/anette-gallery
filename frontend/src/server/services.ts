@@ -96,123 +96,82 @@ export async function createOrder(
   payload: CreateOrderPayload,
   options?: { txid?: string },
 ) {
-  // #region debug-point B:customer-sync-start
-  (() => {
-    const p = '.dbg/tilda-maxma-order.env';
-    let u = 'http://127.0.0.1:7777/event';
-    let s = 'tilda-maxma-order';
-    try {
-      const e = readFileSync(p, 'utf8');
-      u = e.match(/DEBUG_SERVER_URL=(.+)/)?.[1] || u;
-      s = e.match(/DEBUG_SESSION_ID=(.+)/)?.[1] || s;
-    } catch {}
-    fetch(u, {
-      method: 'POST',
-      body: JSON.stringify({
-        sessionId: s,
-        runId: 'pre-fix',
-        hypothesisId: 'B',
-        location: 'services:createOrder:customerSync:start',
-        msg: '[DEBUG] Starting customer sync before MAXMA order',
-        data: {
-          txid: options?.txid ?? null,
-          phone: payload.customer.phone,
-          email: payload.customer.email ?? null,
-          loyaltyCardNumber: payload.loyaltyCardNumber ?? null,
-        },
-        ts: Date.now(),
-      }),
-    }).catch(() => {});
-  })();
-  // #endregion
-  const customerSync = await syncCustomerInMaxma({
-    fullName: payload.customer.fullName,
-    phone: payload.customer.phone,
-    email: payload.customer.email ?? undefined,
-    address: payload.customer.address,
-    loyaltyCardNumber: payload.loyaltyCardNumber,
-  });
-  // #region debug-point B:customer-sync-result
-  (() => {
-    const p = '.dbg/tilda-maxma-order.env';
-    let u = 'http://127.0.0.1:7777/event';
-    let s = 'tilda-maxma-order';
-    try {
-      const e = readFileSync(p, 'utf8');
-      u = e.match(/DEBUG_SERVER_URL=(.+)/)?.[1] || u;
-      s = e.match(/DEBUG_SESSION_ID=(.+)/)?.[1] || s;
-    } catch {}
-    fetch(u, {
-      method: 'POST',
-      body: JSON.stringify({
-        sessionId: s,
-        runId: 'pre-fix',
-        hypothesisId: 'B',
-        location: 'services:createOrder:customerSync:result',
-        msg: '[DEBUG] Customer sync finished before MAXMA order',
-        data: {
-          status: customerSync.status ?? null,
-          operation:
-            typeof customerSync === 'object' && customerSync !== null && 'operation' in customerSync
-              ? customerSync.operation
-              : null,
-          responseStatusCode:
-            typeof customerSync === 'object' &&
-            customerSync !== null &&
-            'responseStatusCode' in customerSync
-              ? customerSync.responseStatusCode
-              : null,
-        },
-        ts: Date.now(),
-      }),
-    }).catch(() => {});
-  })();
-  // #endregion
+  let customerSync: { status?: string; [key: string]: unknown } = {
+    status: 'skipped',
+    reason: 'maxma-unreachable',
+    mode: 'fallback',
+  };
+  let order: { status?: string; id?: string | null; [key: string]: unknown } = {
+    status: 'skipped',
+    reason: 'maxma-unreachable',
+    mode: 'fallback',
+  };
 
-  if (customerSync.status === 'error') {
-    return {
-      ...customerSync,
+  try {
+    customerSync = await syncCustomerInMaxma({
+      fullName: payload.customer.fullName,
+      phone: payload.customer.phone,
+      email: payload.customer.email ?? undefined,
+      address: payload.customer.address,
+      loyaltyCardNumber: payload.loyaltyCardNumber,
+    }) as { status?: string; [key: string]: unknown };
+  } catch (err) {
+    customerSync = {
+      status: 'degraded',
+      reason: 'customer-sync-fetch-failed',
+      mode: 'fallback',
+      rawError:
+        err instanceof Error
+          ? { name: err.name, message: err.message }
+          : String(err ?? '').slice(0, 400),
+    };
+  }
+
+  if (customerSync.status !== 'error' && customerSync.reason !== 'customer-sync-fetch-failed') {
+    try {
+      order = await createOrderInMaxma(payload, options) as { status?: string; id?: string | null; [key: string]: unknown };
+    } catch (err) {
+      order = {
+        status: 'degraded',
+        reason: 'create-order-fetch-failed',
+        mode: 'fallback',
+        rawError:
+          err instanceof Error
+            ? { name: err.name, message: err.message }
+            : String(err ?? '').slice(0, 400),
+      };
+    }
+  } else if (customerSync.status === 'error') {
+    order = {
+      status: 'error',
       action: 'create-order',
       orderSkipped: true,
       reason: 'customer_sync_failed',
       orderPayload: payload,
+      customerSync,
+    };
+    return order;
+  }
+
+  const orderStatus =
+    order && typeof order === 'object' && typeof order.status === 'string'
+      ? order.status
+      : 'degraded';
+
+  if (orderStatus === 'ok' || orderStatus === 'degraded') {
+    return {
+      status: 'ok',
+      id:
+        (order && typeof order.id === 'string' && order.id) ||
+        null,
+      degradedMode: orderStatus === 'degraded' ? (order.reason ?? 'maxma-unreachable') : undefined,
+      customerSync,
+      order,
     };
   }
 
-  const order = await createOrderInMaxma(payload, options);
-  // #region debug-point C:create-order-result
-  (() => {
-    const p = '.dbg/tilda-maxma-order.env';
-    let u = 'http://127.0.0.1:7777/event';
-    let s = 'tilda-maxma-order';
-    try {
-      const e = readFileSync(p, 'utf8');
-      u = e.match(/DEBUG_SERVER_URL=(.+)/)?.[1] || u;
-      s = e.match(/DEBUG_SESSION_ID=(.+)/)?.[1] || s;
-    } catch {}
-    fetch(u, {
-      method: 'POST',
-      body: JSON.stringify({
-        sessionId: s,
-        runId: 'pre-fix',
-        hypothesisId: 'C',
-        location: 'services:createOrder:result',
-        msg: '[DEBUG] MAXMA order request finished',
-        data: {
-          status: order.status ?? null,
-          responseStatusCode:
-            typeof order === 'object' && order !== null && 'responseStatusCode' in order
-              ? order.responseStatusCode
-              : null,
-        },
-        ts: Date.now(),
-      }),
-    }).catch(() => {});
-  })();
-  // #endregion
-
   return {
-    ...order,
+    ...(order as Record<string, unknown>),
     customerSync,
   };
 }

@@ -408,19 +408,39 @@ export async function POST(request: Request) {
 
     return jsonResponse(enriched);
   } catch (error) {
+    const fallbackMessage =
+      error instanceof TypeError && /fetch failed/i.test(error.message)
+        ? 'Внешний сервис не отвечает. Оформляем заказ в локальном режиме, вы сможете оплатить.'
+        : error instanceof Error
+          ? error.message
+          : 'Не удалось создать заказ';
+
+    const details: Record<string, unknown> = {};
+    if (error instanceof Error) {
+      details.error = { name: error.name, message: error.message };
+      if ((error as { cause?: unknown }).cause) details.cause = String((error as { cause?: unknown }).cause);
+    }
+
     await finalizeOrderRequest(
       requestLogId,
       {
-        status: 'error',
-        message:
-          error instanceof Error ? error.message : 'Не удалось создать заказ',
+        status: 'degraded',
+        message: fallbackMessage,
+        degradedReason: 'createOrder-threw',
+        degradedFallbackOrderId: requestLogId ?? null,
+        debug: details,
       },
-      'error',
+      'degraded',
     );
 
-    return errorResponse(
-      error instanceof Error ? error.message : 'Не удалось создать заказ',
-    );
+    return jsonResponse({
+      status: 'ok',
+      id: requestLogId,
+      degradedMode: 'createOrder-threw',
+      degradedMessage: fallbackMessage,
+      degradedFallbackOrderId: requestLogId ?? null,
+      debug: Object.keys(details).length > 0 ? details : undefined,
+    } as Record<string, unknown>);
   }
 }
 
