@@ -517,7 +517,28 @@ export async function GET(request: Request) {
   const status = parseStatus(request);
   const email = parseEmail(request);
   const phone = parsePhone(request);
-  const orders = await listRecentOrderRequests({ limit, status, email, phone });
+  let matchedBy: 'all' | 'email_and_phone' | 'phone' | 'email' = 'all';
+  let orders = await listRecentOrderRequests({ limit, status, email, phone });
+
+  if (email || phone) {
+    matchedBy = email && phone ? 'email_and_phone' : phone ? 'phone' : 'email';
+  }
+
+  // Tilda Members profile fields can differ from checkout data a bit
+  // (e.g. updated email in the cabinet, but the same phone). In that case
+  // we gracefully fall back instead of showing an empty history.
+  if (orders.length === 0 && email && phone) {
+    orders = await listRecentOrderRequests({ limit, status, phone });
+    if (orders.length > 0) {
+      matchedBy = 'phone';
+    } else {
+      orders = await listRecentOrderRequests({ limit, status, email });
+      if (orders.length > 0) {
+        matchedBy = 'email';
+      }
+    }
+  }
+
   const data = {
     status: 'ok',
     source: 'custom-checkout-orders',
@@ -527,6 +548,7 @@ export async function GET(request: Request) {
       status: status ?? null,
       email: email ?? null,
       phone: phone ?? null,
+      matchedBy,
     },
     count: orders.length,
     orders,
