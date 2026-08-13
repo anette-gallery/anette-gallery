@@ -1527,20 +1527,9 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
                   </div>
 
                   <div className={styles.productInfo}>
-                    <input
-                      className={styles.productTitle}
-                      value={item.title ?? ''}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          items: current.items.map((currentItem, currentIndex) =>
-                            currentIndex === index
-                              ? { ...currentItem, title: event.target.value }
-                              : currentItem,
-                          ),
-                        }))
-                      }
-                    />
+                    <p className={styles.productTitle}>
+                      {item.title?.trim() || 'Товар без названия'}
+                    </p>
                     <p className={styles.productMeta}>Артикул: {item.sku}</p>
                   </div>
 

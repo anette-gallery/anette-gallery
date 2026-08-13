@@ -46,6 +46,30 @@ function parseStatus(request: Request): string | undefined {
   return trimmed;
 }
 
+function parseEmail(request: Request): string | undefined {
+  const { searchParams } = new URL(request.url);
+  const value = searchParams.get('email');
+
+  if (!value) {
+    return undefined;
+  }
+
+  const trimmed = value.trim().toLowerCase();
+  return trimmed || undefined;
+}
+
+function parsePhone(request: Request): string | undefined {
+  const { searchParams } = new URL(request.url);
+  const value = searchParams.get('phone');
+
+  if (!value) {
+    return undefined;
+  }
+
+  const digits = value.replace(/\D/g, '');
+  return digits || undefined;
+}
+
 function wantsJson(request: Request): boolean {
   const { searchParams } = new URL(request.url);
   const format = searchParams.get('format');
@@ -119,11 +143,13 @@ function getMaxmaStatus(order: OrderRequestListItem): string {
 function renderStatus(status: string): string {
   const normalized = status.toLowerCase();
   const tone =
-    normalized === 'ok'
+    normalized === 'ok' || normalized === 'paid'
       ? 'success'
-      : normalized === 'error'
+      : normalized === 'error' ||
+          normalized === 'failed' ||
+          normalized === 'cancelled'
         ? 'error'
-        : normalized === 'received'
+        : normalized === 'received' || normalized === 'payment_pending'
           ? 'pending'
           : 'default';
 
@@ -132,11 +158,48 @@ function renderStatus(status: string): string {
     error: 'Ошибка',
     received: 'Получен',
     processed: 'Обработан',
+    paid: 'Оплата прошла',
+    failed: 'Оплата не прошла',
+    cancelled: 'Оплата отменена',
+    payment_pending: 'Ожидает оплаты',
+    payment_on_delivery: 'Оплаты не было',
   };
 
   const label = labels[normalized] ?? status;
 
   return `<span class="status ${tone}">${escapeHtml(label)}</span>`;
+}
+
+function renderPaymentStatus(order: OrderRequestListItem): string {
+  if (order.paymentMethod === 'cash_on_delivery') {
+    return `
+      <div>${renderStatus('payment_on_delivery')}</div>
+      <div class="muted payment-meta">Оплата на месте</div>
+    `;
+  }
+
+  const paymentStatus = (order.paymentStatus ?? '').toLowerCase();
+
+  if (paymentStatus === 'paid') {
+    return renderStatus('paid');
+  }
+
+  if (paymentStatus === 'failed') {
+    return renderStatus('failed');
+  }
+
+  if (paymentStatus === 'cancelled') {
+    return renderStatus('cancelled');
+  }
+
+  if (order.paymentMethod === 'online_card') {
+    return `
+      <div>${renderStatus('payment_pending')}</div>
+      <div class="muted payment-meta">Ожидаем оплату</div>
+    `;
+  }
+
+  return '<span class="muted">Не указано</span>';
 }
 
 function renderOrdersTable(orders: OrderRequestListItem[], limit: number): string {
@@ -164,6 +227,7 @@ function renderOrdersTable(orders: OrderRequestListItem[], limit: number): strin
                   <div class="muted">ID: ${escapeHtml(order.id.slice(0, 8))}</div>
                 </td>
                 <td>${renderStatus(getMaxmaStatus(order))}</td>
+                <td>${renderPaymentStatus(order)}</td>
                 <td>
                   <div class="customer">${escapeHtml(order.fullName ?? 'Без имени')}</div>
                   <div class="muted">${escapeHtml(order.phone ?? 'Телефон не указан')}</div>
@@ -181,7 +245,7 @@ function renderOrdersTable(orders: OrderRequestListItem[], limit: number): strin
           .join('')
       : `
         <tr>
-          <td colspan="6" class="empty">Заказов пока нет</td>
+          <td colspan="7" class="empty">Заказов пока нет</td>
         </tr>
       `;
 
@@ -327,6 +391,9 @@ function renderOrdersTable(orders: OrderRequestListItem[], limit: number): strin
           background: var(--pending-bg);
           color: var(--pending-text);
         }
+        .payment-meta {
+          margin-top: 6px;
+        }
         .empty {
           padding: 48px 16px;
           text-align: center;
@@ -367,6 +434,7 @@ function renderOrdersTable(orders: OrderRequestListItem[], limit: number): strin
               <tr>
                 <th>Дата</th>
                 <th>Статус</th>
+                <th>Оплата</th>
                 <th>Клиент</th>
                 <th>Что заказал</th>
                 <th>Сумма</th>
@@ -447,7 +515,9 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   const limit = parseLimit(request);
   const status = parseStatus(request);
-  const orders = await listRecentOrderRequests({ limit, status });
+  const email = parseEmail(request);
+  const phone = parsePhone(request);
+  const orders = await listRecentOrderRequests({ limit, status, email, phone });
   const data = {
     status: 'ok',
     source: 'custom-checkout-orders',
@@ -455,6 +525,8 @@ export async function GET(request: Request) {
     filter: {
       limit,
       status: status ?? null,
+      email: email ?? null,
+      phone: phone ?? null,
     },
     count: orders.length,
     orders,

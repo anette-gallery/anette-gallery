@@ -175,6 +175,24 @@ type OrderRequestRow = {
   updated_at: string;
 };
 
+function normalizeOrderEmail(value: string | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return normalized || null;
+}
+
+function normalizeOrderPhone(value: string | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const digits = value.replace(/\D/g, '');
+  return digits || null;
+}
+
 function toOrderRequestListItem(row: OrderRequestRow): OrderRequestListItem {
   return {
     id: row.id,
@@ -206,7 +224,12 @@ function toOrderRequestListItem(row: OrderRequestRow): OrderRequestListItem {
 }
 
 export async function listRecentOrderRequests(
-  options: { limit?: number; status?: string } = {},
+  options: {
+    limit?: number;
+    status?: string;
+    email?: string;
+    phone?: string;
+  } = {},
 ): Promise<OrderRequestListItem[]> {
   if (!isDatabaseConfigured()) {
     return [];
@@ -219,55 +242,57 @@ export async function listRecentOrderRequests(
     typeof options.status === 'string' && options.status.trim().length > 0
       ? options.status.trim()
       : null;
+  const emailFilter = normalizeOrderEmail(options.email);
+  const phoneFilter = normalizeOrderPhone(options.phone);
+  const values: unknown[] = [];
+  const where: string[] = [];
 
-  const rows = statusFilter
-    ? await query<OrderRequestRow>(
-        `
-          SELECT
-            id,
-            source_channel,
-            status,
-            full_name,
-            phone,
-            email,
-            total_amount,
-            items_count,
-            delivery_method,
-            comment,
-            raw_payload,
-            response_payload,
-            created_at,
-            updated_at
-          FROM order_requests
-          WHERE status = $1
-          ORDER BY created_at DESC
-          LIMIT $2
-        `,
-        [statusFilter, limit],
-      )
-    : await query<OrderRequestRow>(
-        `
-          SELECT
-            id,
-            source_channel,
-            status,
-            full_name,
-            phone,
-            email,
-            total_amount,
-            items_count,
-            delivery_method,
-            comment,
-            raw_payload,
-            response_payload,
-            created_at,
-            updated_at
-          FROM order_requests
-          ORDER BY created_at DESC
-          LIMIT $1
-        `,
-        [limit],
-      );
+  if (statusFilter) {
+    where.push(`status = $${values.push(statusFilter)}`);
+  }
+
+  if (emailFilter) {
+    where.push(`LOWER(COALESCE(email, '')) = $${values.push(emailFilter)}`);
+  }
+
+  if (phoneFilter) {
+    where.push(
+      `REGEXP_REPLACE(COALESCE(phone, ''), '\\D', '', 'g') = $${values.push(phoneFilter)}`,
+    );
+  }
+
+  values.push(limit);
+  const limitIndex = values.length;
+  const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+
+  const rows = await query<OrderRequestRow>(
+    `
+      SELECT
+        id,
+        source_channel,
+        status,
+        full_name,
+        phone,
+        email,
+        total_amount,
+        items_count,
+        delivery_method,
+        comment,
+        raw_payload,
+        response_payload,
+        payment_method,
+        payment_status,
+        payment_invoice_id,
+        payment_payload,
+        created_at,
+        updated_at
+      FROM order_requests
+      ${whereSql}
+      ORDER BY created_at DESC
+      LIMIT $${limitIndex}
+    `,
+    values,
+  );
 
   return rows.map(toOrderRequestListItem);
 }
@@ -296,6 +321,10 @@ export async function findOrderRequestById(
         comment,
         raw_payload,
         response_payload,
+        payment_method,
+        payment_status,
+        payment_invoice_id,
+        payment_payload,
         created_at,
         updated_at
       FROM order_requests

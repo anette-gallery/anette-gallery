@@ -457,11 +457,15 @@
 }
 
 .productTitle {
+  margin: 0 0 6px;
   padding-top: 0;
-  font-size: 28px;
+  font-size: 20px;
+  line-height: 1.2;
   font-weight: 400;
   border-bottom: none;
   font-family: Georgia, "Times New Roman", serif;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .productMeta {
