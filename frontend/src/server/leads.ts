@@ -77,7 +77,7 @@ export async function saveTildaLead(
         normalized_payload
       )
       VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::text::jsonb, $13::text::jsonb
       )
     `,
     [

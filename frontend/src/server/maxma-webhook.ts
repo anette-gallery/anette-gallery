@@ -173,7 +173,7 @@ export async function saveMaxmaWebhookEvents(
           source_system,
           event_payload
         )
-        VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+        VALUES ($1, $2, $3, $4, $5, $6::text::jsonb)
         ON CONFLICT (event_id) DO NOTHING
         RETURNING TRUE AS inserted
       `,

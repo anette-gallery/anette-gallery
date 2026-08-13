@@ -102,7 +102,7 @@ export async function saveOrderRequest(
         payment_status
       )
       VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text::jsonb, $12, $13
       )
     `,
     [
@@ -146,7 +146,7 @@ export async function finalizeOrderRequest(
       UPDATE order_requests
       SET
         status = $2,
-        response_payload = $3::jsonb,
+        response_payload = $3::text::jsonb,
         updated_at = NOW()
       WHERE id = $1
     `,
@@ -347,7 +347,7 @@ export async function ackOrderRequest(
       UPDATE order_requests
       SET
         status = $2,
-        response_payload = $3::jsonb,
+        response_payload = $3::text::jsonb,
         updated_at = NOW()
       WHERE id = $1
     `,
@@ -401,7 +401,7 @@ export async function setOrderRequestPayment(
     );
   }
   sets.push(
-    `payment_payload = $${values.push(toJsonbText(mergedPayment)) - values.length + 1}::jsonb`,
+    `payment_payload = $${values.push(toJsonbText(mergedPayment)) - values.length + 1}::text::jsonb`,
   );
   if (options.status) {
     sets.push(`status = $${values.push(String(options.status)) - values.length + 1}`);
