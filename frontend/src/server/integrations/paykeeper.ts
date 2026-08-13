@@ -46,16 +46,23 @@ type PaykeeperCredentials = {
 
 function ensurePaykeeperCredentials(): PaykeeperCredentials {
   const { paykeeper } = getConfig();
-  if (
-    !paykeeper.baseUrl ||
-    !paykeeper.username ||
-    !paykeeper.password ||
-    !paykeeper.secret
-  ) {
+  const missing: string[] = [];
+  if (!paykeeper.baseUrl) missing.push('PAYKEEPER_BASE_URL');
+  if (!paykeeper.username) missing.push('PAYKEEPER_USERNAME');
+  if (!paykeeper.password) missing.push('PAYKEEPER_PASSWORD');
+  if (!paykeeper.secret) missing.push('PAYKEEPER_SECRET');
+  if (missing.length > 0) {
     throw new ApiCallError(
       503,
-      'Paykeeper credentials not configured',
+      `Не настроены реквизиты платежной системы в Vercel. Добавьте переменные: ${missing.join(', ')}.`,
       'paykeeper_not_configured',
+      { missingEnv: missing, debug: {
+          baseUrlSet: Boolean(paykeeper.baseUrl),
+          usernameSet: Boolean(paykeeper.username),
+          passwordSet: Boolean(paykeeper.password),
+          secretSet: Boolean(paykeeper.secret),
+          baseUrl: paykeeper.baseUrl ? `${paykeeper.baseUrl.slice(0, 30)}...` : null,
+      } },
     );
   }
   return {

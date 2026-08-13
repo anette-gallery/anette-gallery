@@ -62,6 +62,18 @@ export async function POST(request: Request) {
       error && typeof error === 'object' && 'status' in error && typeof (error as { status: unknown }).status === 'number'
         ? (error as { status: number }).status
         : 500;
-    return errorResponse(status, message);
+    const details: Record<string, unknown> = {};
+    if (error && typeof error === 'object' && 'code' in error) {
+      details.code = (error as { code?: unknown }).code;
+    }
+    if (error && typeof error === 'object' && 'details' in error && (error as { details?: unknown }).details !== undefined) {
+      details.debug = (error as { details?: unknown }).details;
+    }
+    try {
+      details.raw = error instanceof Error
+        ? { name: error.name, message: error.message, stack: error.stack }
+        : error;
+    } catch {}
+    return errorResponse(status, message, Object.keys(details).length > 0 ? details : undefined);
   }
 }
