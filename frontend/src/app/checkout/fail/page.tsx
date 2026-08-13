@@ -5,6 +5,8 @@ import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import styles from '../page.module.css';
 
+const CATALOG_URL = 'https://anette-gallery.tilda.ws/main';
+
 function CheckoutFailContent() {
   const search = useSearchParams();
   const reason = search.get('reason') || 'payment_failed';
@@ -27,9 +29,9 @@ function CheckoutFailContent() {
           <Link href="/checkout" className={styles.resultButton}>
             Попробовать снова
           </Link>
-          <Link href="/" className={styles.resultButtonGhost}>
+          <a href={CATALOG_URL} className={styles.resultButtonGhost}>
             Вернуться в каталог
-          </Link>
+          </a>
         </div>
       </div>
     </main>

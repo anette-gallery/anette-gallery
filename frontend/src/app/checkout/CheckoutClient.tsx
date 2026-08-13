@@ -16,7 +16,7 @@ import type {
 } from '@/types/api';
 import styles from './page.module.css';
 
-const EXIT_URL = 'https://anette-gallery.tilda.ws';
+const EXIT_URL = 'https://anette-gallery.tilda.ws/main';
 
 const DELIVERY_OPTIONS = [
   {

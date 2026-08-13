@@ -2,6 +2,7 @@ import Link from 'next/link';
 import styles from '../page.module.css';
 
 export const dynamic = 'force-dynamic';
+const CATALOG_URL = 'https://anette-gallery.tilda.ws/main';
 
 export default function CheckoutSuccessPage() {
   return (
@@ -13,9 +14,9 @@ export default function CheckoutSuccessPage() {
           Спасибо за покупку! Мы свяжемся с вами в ближайшее время для
           подтверждения и согласования деталей доставки.
         </p>
-        <Link href="/" className={styles.resultButton}>
+        <a href={CATALOG_URL} className={styles.resultButton}>
           Вернуться в каталог
-        </Link>
+        </a>
       </div>
     </main>
   );
