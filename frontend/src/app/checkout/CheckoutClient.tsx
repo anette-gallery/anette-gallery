@@ -645,6 +645,15 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
           return;
         }
 
+        const isAbort =
+          (submitError instanceof Error && submitError.name === 'AbortError') ||
+          /Fetch is aborted|request cancelled|signal is aborted/i.test(
+            submitError instanceof Error ? submitError.message : String(submitError ?? ''),
+          );
+        if (isAbort) {
+          return;
+        }
+
         const message =
           submitError instanceof Error
             ? submitError.message
@@ -772,6 +781,14 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
         buildCalculationPayload(resolvedForm, { registerInLoyaltyProgram }),
       );
     } catch (submitError) {
+      const isAbort =
+        (submitError instanceof Error && submitError.name === 'AbortError') ||
+        /Fetch is aborted|request cancelled|signal is aborted/i.test(
+          submitError instanceof Error ? submitError.message : String(submitError ?? ''),
+        );
+      if (isAbort) {
+        return;
+      }
       const message =
         submitError instanceof Error
           ? submitError.message
@@ -804,6 +821,14 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
       );
     } catch (submitError) {
       setLoyaltyRegistrationPhone(null);
+      const isAbort =
+        (submitError instanceof Error && submitError.name === 'AbortError') ||
+        /Fetch is aborted|request cancelled|signal is aborted/i.test(
+          submitError instanceof Error ? submitError.message : String(submitError ?? ''),
+        );
+      if (isAbort) {
+        return;
+      }
       const message =
         submitError instanceof Error
           ? submitError.message

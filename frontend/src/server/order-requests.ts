@@ -387,27 +387,28 @@ export async function setOrderRequestPayment(
     updatedAt: new Date().toISOString(),
   };
 
-  const values: unknown[] = [id];
+  const values: unknown[] = [];
   const sets: string[] = [];
-  sets.push(`payment_status = $${values.push(String(options.paymentStatus)) - values.length + 1}`);
+  sets.push(`payment_status = $${values.push(String(options.paymentStatus))}`);
   if (options.paymentInvoiceId) {
     sets.push(
-      `payment_invoice_id = $${values.push(String(options.paymentInvoiceId)) - values.length + 1}`,
+      `payment_invoice_id = $${values.push(String(options.paymentInvoiceId))}`,
     );
   }
   if (options.paymentMethod) {
     sets.push(
-      `payment_method = $${values.push(String(options.paymentMethod)) - values.length + 1}`,
+      `payment_method = $${values.push(String(options.paymentMethod))}`,
     );
   }
   sets.push(
-    `payment_payload = $${values.push(toJsonbText(mergedPayment)) - values.length + 1}::text::jsonb`,
+    `payment_payload = $${values.push(toJsonbText(mergedPayment))}::text::jsonb`,
   );
   if (options.status) {
-    sets.push(`status = $${values.push(String(options.status)) - values.length + 1}`);
+    sets.push(`status = $${values.push(String(options.status))}`);
   }
   sets.push(`updated_at = NOW()`);
-  const sql = `UPDATE order_requests SET ${sets.join(', ')} WHERE id = $1`;
+  const whereIndex = values.push(String(id));
+  const sql = `UPDATE order_requests SET ${sets.join(', ')} WHERE id = $${whereIndex}`;
 
   await query(sql, values);
 }
