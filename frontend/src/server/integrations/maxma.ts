@@ -134,6 +134,30 @@ function buildCompatibility(payload: CalculateCheckoutPayload) {
   };
 }
 
+function buildMaxmaProduct(item: {
+  sku: string;
+  price?: number;
+  unitPrice?: number;
+  title?: string;
+}) {
+  const title =
+    typeof item.title === 'string' ? item.title.trim() : '';
+
+  return {
+    sku: item.sku,
+    blackPrice: item.unitPrice ?? item.price ?? 0,
+    // MAXMA currently receives sku/price reliably. We additionally send
+    // common title aliases so support can confirm which field they consume.
+    ...(title
+      ? {
+          title,
+          name: title,
+          productName: title,
+        }
+      : {}),
+  };
+}
+
 function buildCalculationQuery(payload: CalculateCheckoutPayload) {
   return {
     ...(!payload.promoCode && payload.phone
@@ -146,10 +170,7 @@ function buildCalculationQuery(payload: CalculateCheckoutPayload) {
     shop: buildShop(),
     rows: payload.items.map((item, index) => ({
       id: `${index + 1}`,
-      product: {
-        sku: item.sku,
-        blackPrice: item.price,
-      },
+      product: buildMaxmaProduct(item),
       qty: item.quantity,
     })),
     collectBonuses: 'auto',
@@ -170,10 +191,7 @@ function buildOrderCalculationQuery(payload: CreateOrderPayload) {
     shop: buildShop(),
     rows: payload.items.map((item, index) => ({
       id: `${index + 1}`,
-      product: {
-        sku: item.sku,
-        blackPrice: (item as unknown as { unitPrice?: number }).unitPrice ?? item.price ?? 0,
-      },
+      product: buildMaxmaProduct(item),
       qty: item.quantity,
     })),
     collectBonuses: 'auto',
