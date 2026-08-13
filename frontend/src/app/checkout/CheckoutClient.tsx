@@ -270,6 +270,13 @@ function buildCalculationPayload(
       sku: item.sku.trim(),
       title: item.title?.trim() || undefined,
       image: item.image?.trim() || undefined,
+      category: item.category?.trim() || undefined,
+      categoryExternalId: item.categoryExternalId?.trim() || undefined,
+      externalId: item.externalId?.trim() || undefined,
+      vatPercent:
+        typeof item.vatPercent === 'number' && Number.isFinite(item.vatPercent)
+          ? item.vatPercent
+          : undefined,
       quantity: Math.max(1, Math.trunc(item.quantity || 1)),
       price: Math.max(0, Number(item.price || 0)),
     })),
@@ -298,6 +305,13 @@ function buildOrderPayload(
       sku: item.sku.trim(),
       title: (item.title ?? '').trim() || undefined,
       image: item.image?.trim() || undefined,
+      category: item.category?.trim() || undefined,
+      categoryExternalId: item.categoryExternalId?.trim() || undefined,
+      externalId: item.externalId?.trim() || undefined,
+      vatPercent:
+        typeof item.vatPercent === 'number' && Number.isFinite(item.vatPercent)
+          ? item.vatPercent
+          : undefined,
       quantity: Math.max(1, Math.trunc(item.quantity || 1)),
       price: Math.max(0, Number(item.price || 0)),
     })),

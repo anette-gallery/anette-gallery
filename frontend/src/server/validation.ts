@@ -164,6 +164,26 @@ function parseCheckoutItem(value: unknown, index: number) {
       optional: true,
       maxLength: 2048,
     }),
+    category: expectString(value.category, `items[${index}].category`, {
+      optional: true,
+      maxLength: 255,
+    }),
+    categoryExternalId: expectString(
+      value.categoryExternalId,
+      `items[${index}].categoryExternalId`,
+      {
+        optional: true,
+        maxLength: 255,
+      },
+    ),
+    externalId: expectString(value.externalId, `items[${index}].externalId`, {
+      optional: true,
+      maxLength: 255,
+    }),
+    vatPercent: expectNumber(value.vatPercent, `items[${index}].vatPercent`, {
+      optional: true,
+      min: 0,
+    }),
     quantity: expectNumber(value.quantity, `items[${index}].quantity`, {
       min: 1,
       integer: true,
@@ -295,6 +315,26 @@ function parseOrderItem(value: unknown, index: number): OrderItem {
     image: expectString(value.image, `items[${index}].image`, {
       optional: true,
       maxLength: 2048,
+    }),
+    category: expectString(value.category, `items[${index}].category`, {
+      optional: true,
+      maxLength: 255,
+    }),
+    categoryExternalId: expectString(
+      value.categoryExternalId,
+      `items[${index}].categoryExternalId`,
+      {
+        optional: true,
+        maxLength: 255,
+      },
+    ),
+    externalId: expectString(value.externalId, `items[${index}].externalId`, {
+      optional: true,
+      maxLength: 255,
+    }),
+    vatPercent: expectNumber(value.vatPercent, `items[${index}].vatPercent`, {
+      optional: true,
+      min: 0,
     }),
     quantity: expectNumber(value.quantity, `items[${index}].quantity`, {
       min: 1,

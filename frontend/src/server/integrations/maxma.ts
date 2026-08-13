@@ -139,22 +139,40 @@ function buildMaxmaProduct(item: {
   price?: number;
   unitPrice?: number;
   title?: string;
+  category?: string;
+  categoryExternalId?: string;
+  externalId?: string;
+  vatPercent?: number;
 }) {
   const title =
-    typeof item.title === 'string' ? item.title.trim() : '';
+    typeof item.title === 'string' && item.title.trim()
+      ? item.title.trim()
+      : undefined;
+  const category =
+    typeof item.category === 'string' && item.category.trim()
+      ? item.category.trim()
+      : undefined;
+  const categoryExternalId =
+    typeof item.categoryExternalId === 'string' && item.categoryExternalId.trim()
+      ? item.categoryExternalId.trim()
+      : undefined;
+  const externalId =
+    typeof item.externalId === 'string' && item.externalId.trim()
+      ? item.externalId.trim()
+      : item.sku;
+  const vatPercent =
+    typeof item.vatPercent === 'number' && Number.isFinite(item.vatPercent)
+      ? item.vatPercent
+      : 0;
 
   return {
-    sku: item.sku,
     blackPrice: item.unitPrice ?? item.price ?? 0,
-    // MAXMA currently receives sku/price reliably. We additionally send
-    // common title aliases so support can confirm which field they consume.
-    ...(title
-      ? {
-          title,
-          name: title,
-          productName: title,
-        }
-      : {}),
+    ...(category ? { category } : {}),
+    ...(categoryExternalId ? { categoryExternalId } : {}),
+    externalId,
+    sku: item.sku,
+    ...(title ? { title } : {}),
+    vatPercent,
   };
 }
 

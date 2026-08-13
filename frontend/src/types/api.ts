@@ -41,6 +41,10 @@ export const CheckoutItemSchema = z.object({
   sku: z.string().trim().min(1).max(255),
   title: z.string().trim().max(500).optional(),
   image: z.string().trim().max(500).url().optional().or(z.literal('')),
+  category: z.string().trim().max(255).optional(),
+  categoryExternalId: z.string().trim().max(255).optional(),
+  externalId: z.string().trim().max(255).optional(),
+  vatPercent: z.coerce.number().finite().min(0).max(100).optional(),
   quantity: z.coerce.number().int().min(1).max(999999),
   price: z.coerce.number().finite().min(0).max(1_000_000_000),
 });
@@ -429,6 +433,10 @@ export type OrderItem = {
   sku: string;
   title?: string;
   image?: string;
+  category?: string;
+  categoryExternalId?: string;
+  externalId?: string;
+  vatPercent?: number;
   quantity: number;
   unitPrice: number;
   price: number;
