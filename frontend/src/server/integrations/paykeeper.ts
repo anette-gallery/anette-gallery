@@ -47,29 +47,33 @@ type PaykeeperCredentials = {
 function ensurePaykeeperCredentials(): PaykeeperCredentials {
   const { paykeeper } = getConfig();
   const missing: string[] = [];
-  if (!paykeeper.baseUrl) missing.push('PAYKEEPER_BASE_URL');
-  if (!paykeeper.username) missing.push('PAYKEEPER_USERNAME');
-  if (!paykeeper.password) missing.push('PAYKEEPER_PASSWORD');
-  if (!paykeeper.secret) missing.push('PAYKEEPER_SECRET');
+  const baseUrl = paykeeper.baseUrl ?? null;
+  const username = paykeeper.username ?? null;
+  const password = paykeeper.password ?? null;
+  const secret = paykeeper.secret ?? null;
+  if (!baseUrl) missing.push('PAYKEEPER_BASE_URL');
+  if (!username) missing.push('PAYKEEPER_USERNAME');
+  if (!password) missing.push('PAYKEEPER_PASSWORD');
+  if (!secret) missing.push('PAYKEEPER_SECRET');
   if (missing.length > 0) {
     throw new ApiCallError(
       503,
       `Не настроены реквизиты платежной системы в Vercel. Добавьте переменные: ${missing.join(', ')}.`,
       'paykeeper_not_configured',
       { missingEnv: missing, debug: {
-          baseUrlSet: Boolean(paykeeper.baseUrl),
-          usernameSet: Boolean(paykeeper.username),
-          passwordSet: Boolean(paykeeper.password),
-          secretSet: Boolean(paykeeper.secret),
-          baseUrl: paykeeper.baseUrl ? `${paykeeper.baseUrl.slice(0, 30)}...` : null,
+          baseUrlSet: Boolean(baseUrl),
+          usernameSet: Boolean(username),
+          passwordSet: Boolean(password),
+          secretSet: Boolean(secret),
+          baseUrl: baseUrl ? `${baseUrl.slice(0, 30)}...` : null,
       } },
     );
   }
   return {
-    baseUrl: paykeeper.baseUrl,
-    username: paykeeper.username,
-    password: paykeeper.password,
-    secret: paykeeper.secret,
+    baseUrl: baseUrl!,
+    username: username!,
+    password: password!,
+    secret: secret!,
     serverCallbackSecret: paykeeper.serverCallbackSecret,
     successUrl: paykeeper.successUrl,
     failUrl: paykeeper.failUrl,
