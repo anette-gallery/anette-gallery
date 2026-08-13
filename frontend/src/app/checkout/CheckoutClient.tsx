@@ -733,6 +733,53 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     setCalculationProgressLabel(null);
   }
 
+  function handleExitClick(event: React.MouseEvent<HTMLAnchorElement>) {
+    event.preventDefault();
+    stopAutoProfileCalculation();
+    try {
+      window.localStorage.removeItem(CHECKOUT_PROFILE_KEY);
+      window.localStorage.removeItem(CHECKOUT_LOYALTY_PHONE_KEY);
+      const allKeys =
+        typeof window.localStorage?.key === 'function'
+          ? Array.from({ length: window.localStorage.length }, (_, i) => window.localStorage.key(i))
+          : [];
+      for (const key of allKeys) {
+        if (typeof key === 'string' && /lapaloma|checkout|maxma|paykeeper|loyalty/i.test(key)) {
+          window.localStorage.removeItem(key);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    setCalculation(null);
+    setLastCalculatedKey('');
+    setError(null);
+    setOrderError(null);
+    setOrderResponse(null);
+    setPaymentRedirectUrl(null);
+    setLoyaltyRegistrationPhone(null);
+    setForm((current) => ({
+      ...current,
+      customer: {
+        fullName: '',
+        phone: '',
+        email: '',
+        address: '',
+      },
+      promoCode: '',
+      giftCardNumber: '',
+      loyaltyCardNumber: '',
+      comment: '',
+    }));
+    window.setTimeout(() => {
+      try {
+        window.location.assign(EXIT_URL);
+      } catch {
+        window.location.href = EXIT_URL;
+      }
+    }, 50);
+  }
+
   function handleManualDiscountFieldChange(
     field: 'promoCode' | 'giftCardNumber',
     value: string,
@@ -1011,7 +1058,7 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
                   <p className={styles.accountMeta}>({form.customer.email})</p>
                 ) : null}
               </div>
-              <a className={styles.exitButton} href={EXIT_URL}>
+              <a className={styles.exitButton} href={EXIT_URL} onClick={handleExitClick}>
                 Выйти
               </a>
             </div>
