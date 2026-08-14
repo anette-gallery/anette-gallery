@@ -7,6 +7,8 @@
     (script && script.dataset && script.dataset.buttonText) ||
     'Оформить заказ';
   var BRIDGE_ATTR = 'data-custom-checkout-bound';
+  var HIDDEN_ATTR = 'data-custom-checkout-hidden';
+  var PROXY_ATTR = 'data-custom-checkout-proxy';
   var BUTTON_CLASS = 't-custom-checkout-button';
   var STYLE_ELEMENT_ID = 't-custom-checkout-button-styles';
   var HAS_POINTER_EVENT = typeof window !== 'undefined' && 'PointerEvent' in window;
@@ -94,6 +96,45 @@
     node.style.setProperty('border', '0', 'important');
     node.style.setProperty('border-radius', '12px', 'important');
     node.style.setProperty('box-shadow', '0 10px 24px rgba(214,31,31,0.18)', 'important');
+  }
+
+  function hideNativeCheckoutButton(node) {
+    if (!node || node.nodeType !== 1) {
+      return;
+    }
+
+    node.setAttribute(HIDDEN_ATTR, '1');
+    node.setAttribute('aria-hidden', 'true');
+
+    if ('disabled' in node) {
+      node.disabled = true;
+    }
+
+    node.style.setProperty('display', 'none', 'important');
+    node.style.setProperty('pointer-events', 'none', 'important');
+  }
+
+  function createProxyCheckoutButton(node) {
+    if (!node || !node.parentNode) {
+      return null;
+    }
+
+    var nextSibling = node.nextElementSibling;
+
+    if (nextSibling && nextSibling.getAttribute(PROXY_ATTR) === '1') {
+      applyButtonStyles(nextSibling);
+      return nextSibling;
+    }
+
+    var proxy = document.createElement('button');
+    proxy.type = 'button';
+    proxy.setAttribute(PROXY_ATTR, '1');
+    proxy.textContent = BUTTON_TEXT;
+    applyButtonStyles(proxy);
+    proxy.addEventListener('click', openCustomCheckout, true);
+
+    node.parentNode.insertBefore(proxy, node.nextSibling);
+    return proxy;
   }
 
   function toNumber(value) {
@@ -711,6 +752,10 @@
       return false;
     }
 
+    if (node.getAttribute(HIDDEN_ATTR) === '1') {
+      return false;
+    }
+
     var text = ((node.textContent || node.value || '') + '').toLowerCase();
     var href = ((node.getAttribute && node.getAttribute('href')) || '').toLowerCase();
     var className =
@@ -757,15 +802,8 @@
       }
 
       node.setAttribute(BRIDGE_ATTR, '1');
-
-      if (node.tagName === 'INPUT') {
-        node.value = BUTTON_TEXT;
-      } else if (node.textContent && /оформ|заказ|checkout|order/i.test(node.textContent)) {
-        node.textContent = BUTTON_TEXT;
-      }
-
-      applyButtonStyles(node);
-      node.addEventListener('click', openCustomCheckout, true);
+      hideNativeCheckoutButton(node);
+      createProxyCheckoutButton(node);
     });
   }
 
