@@ -7,20 +7,12 @@
     (script && script.dataset && script.dataset.buttonText) ||
     'Оформить заказ';
   var BRIDGE_ATTR = 'data-custom-checkout-bound';
-  var HIDDEN_ATTR = 'data-custom-checkout-hidden';
-  var PROXY_ATTR = 'data-custom-checkout-proxy';
   var BUTTON_CLASS = 't-custom-checkout-button';
   var STYLE_ELEMENT_ID = 't-custom-checkout-button-styles';
-  var HAS_POINTER_EVENT = typeof window !== 'undefined' && 'PointerEvent' in window;
   var CART_ROOT_SELECTOR =
     '.t706__cartwin, .t706__cartpage, .t706__sidebar, .t706, .t-store__cart, .t228__cart, .js-store-cart';
   var CART_ACTION_SELECTOR =
     'button, a, input[type="submit"], input[type="button"], [role="button"], .t706__cartwin-proceed, .t706__cartpage-open-form, .t706__sidebar-continue, .t706__orderform-btn, .js-store-order, .js-cart-order, .js-tcart-checkout';
-  var CART_CHECKOUT_CLASS_RE =
-    /cartwin-proceed|cartpage-open-form|sidebar-continue|orderform-btn|js-store-order|js-cart-order|js-tcart-checkout|tcart__order|cart__order|checkout-btn|checkout-button/i;
-  var CART_IGNORE_CLASS_RE =
-    /plus|minus|qty|quantity|amount|count|remove|delete|close|clear|cancel|inc|dec|control/i;
-  var isRedirecting = false;
 
   function injectButtonStyles() {
     if (document.getElementById(STYLE_ELEMENT_ID)) {
@@ -96,45 +88,6 @@
     node.style.setProperty('border', '0', 'important');
     node.style.setProperty('border-radius', '12px', 'important');
     node.style.setProperty('box-shadow', '0 10px 24px rgba(214,31,31,0.18)', 'important');
-  }
-
-  function hideNativeCheckoutButton(node) {
-    if (!node || node.nodeType !== 1) {
-      return;
-    }
-
-    node.setAttribute(HIDDEN_ATTR, '1');
-    node.setAttribute('aria-hidden', 'true');
-
-    if ('disabled' in node) {
-      node.disabled = true;
-    }
-
-    node.style.setProperty('display', 'none', 'important');
-    node.style.setProperty('pointer-events', 'none', 'important');
-  }
-
-  function createProxyCheckoutButton(node) {
-    if (!node || !node.parentNode) {
-      return null;
-    }
-
-    var nextSibling = node.nextElementSibling;
-
-    if (nextSibling && nextSibling.getAttribute(PROXY_ATTR) === '1') {
-      applyButtonStyles(nextSibling);
-      return nextSibling;
-    }
-
-    var proxy = document.createElement('button');
-    proxy.type = 'button';
-    proxy.setAttribute(PROXY_ATTR, '1');
-    proxy.textContent = BUTTON_TEXT;
-    applyButtonStyles(proxy);
-    proxy.addEventListener('click', openCustomCheckout, true);
-
-    node.parentNode.insertBefore(proxy, node.nextSibling);
-    return proxy;
   }
 
   function toNumber(value) {
@@ -698,10 +651,6 @@
   }
 
   function openCustomCheckout(event) {
-    if (isRedirecting) {
-      return;
-    }
-
     var targetUrl = buildCheckoutUrl();
 
     if (!targetUrl) {
@@ -715,7 +664,6 @@
       event.stopImmediatePropagation();
     }
 
-    isRedirecting = true;
     window.location.href = targetUrl;
   }
 
@@ -731,28 +679,8 @@
     return null;
   }
 
-  function findCheckoutButtonInForm(form) {
-    if (!form || form.nodeType !== 1 || typeof form.querySelectorAll !== 'function') {
-      return null;
-    }
-
-    var nodes = form.querySelectorAll(CART_ACTION_SELECTOR);
-
-    for (var i = 0; i < nodes.length; i += 1) {
-      if (isCartButton(nodes[i])) {
-        return nodes[i];
-      }
-    }
-
-    return null;
-  }
-
   function isCartButton(node) {
     if (!node || node.nodeType !== 1) {
-      return false;
-    }
-
-    if (node.getAttribute(HIDDEN_ATTR) === '1') {
       return false;
     }
 
@@ -763,32 +691,12 @@
         ? node.className.toLowerCase()
         : '';
     var inCartPopup = !!node.closest(CART_ROOT_SELECTOR);
-    var ariaLabel = (
-      (node.getAttribute && node.getAttribute('aria-label')) ||
-      (node.getAttribute && node.getAttribute('title')) ||
-      ''
-    ).toLowerCase();
-    var dataAction = (
-      (node.getAttribute && node.getAttribute('data-action')) ||
-      (node.getAttribute && node.getAttribute('data-cart-action')) ||
-      ''
-    ).toLowerCase();
-
-    var looksLikeIgnoredControl =
-      /удал|убрать|remove|delete|close|закрыть|очистить|clear|\+|-/.test(text) ||
-      /remove|delete|close|clear/.test(href) ||
-      /удал|убрать|remove|delete|close|закрыть|очистить|clear|\+|-/.test(ariaLabel) ||
-      /remove|delete|close|clear|plus|minus|inc|dec/.test(dataAction) ||
-      CART_IGNORE_CLASS_RE.test(className);
-
     var looksLikeCheckoutAction =
-      /оформить заказ|перейти к оформлению|checkout|place order|оформить/i.test(text) ||
-      /checkout|order/.test(href) ||
-      /оформить|checkout|place order/.test(ariaLabel) ||
-      /checkout|order|submit/.test(dataAction) ||
-      CART_CHECKOUT_CLASS_RE.test(className);
+      /оформ|заказ|checkout|order/.test(text) ||
+      /checkout|order|cart/.test(href) ||
+      /order|checkout|cart|cartpage-open-form|sidebar-continue/.test(className);
 
-    return inCartPopup && !looksLikeIgnoredControl && looksLikeCheckoutAction;
+    return inCartPopup && looksLikeCheckoutAction;
   }
 
   function bindCartButtons() {
@@ -802,26 +710,20 @@
       }
 
       node.setAttribute(BRIDGE_ATTR, '1');
-      hideNativeCheckoutButton(node);
-      createProxyCheckoutButton(node);
+
+      if (node.tagName === 'INPUT') {
+        node.value = BUTTON_TEXT;
+      } else if (node.textContent && /оформ|заказ|checkout|order/i.test(node.textContent)) {
+        node.textContent = BUTTON_TEXT;
+      }
+
+      applyButtonStyles(node);
+      node.addEventListener('click', openCustomCheckout, true);
     });
   }
 
+
   function handleDocumentClick(event) {
-    var actionNode = findCartActionNode(event.target);
-
-    if (!isCartButton(actionNode)) {
-      return;
-    }
-
-    openCustomCheckout(event);
-  }
-
-  function handleDocumentPointerDown(event) {
-    if (event && typeof event.button === 'number' && event.button !== 0) {
-      return;
-    }
-
     var actionNode = findCartActionNode(event.target);
 
     if (!isCartButton(actionNode)) {
@@ -842,26 +744,10 @@
       return;
     }
 
-    var submitter = findCartActionNode(event.submitter);
-
-    if (submitter) {
-      if (!isCartButton(submitter)) {
-        return;
-      }
-
-      openCustomCheckout(event);
-      return;
-    }
-
-    if (!findCheckoutButtonInForm(form)) {
-      return;
-    }
-
     openCustomCheckout(event);
   }
 
   bindCartButtons();
-  document.addEventListener(HAS_POINTER_EVENT ? 'pointerdown' : 'mousedown', handleDocumentPointerDown, true);
   document.addEventListener('click', handleDocumentClick, true);
   document.addEventListener('submit', handleDocumentSubmit, true);
 
