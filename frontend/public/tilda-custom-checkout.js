@@ -722,7 +722,6 @@
     });
   }
 
-
   function handleDocumentClick(event) {
     var actionNode = findCartActionNode(event.target);
 
