@@ -2,6 +2,11 @@ import CheckoutClient from './CheckoutClient';
 
 type SearchParamsInput = Record<string, string | string[] | undefined>;
 
+type CheckoutOptions = {
+  disableDiscounts: boolean;
+  specialOfferLabel?: string;
+};
+
 function readString(value: string | string[] | undefined): string {
   if (Array.isArray(value)) {
     return value[0] ?? '';
@@ -21,6 +26,12 @@ function readNumber(value: string | string[] | undefined, fallback: number): num
   const parsed = Number(raw);
 
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function readBoolean(value: string | string[] | undefined): boolean {
+  const normalized = readString(value).trim().toLowerCase();
+
+  return ['1', 'true', 'yes', 'y', 'on'].includes(normalized);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -160,6 +171,26 @@ function buildInitialForm(searchParams: SearchParamsInput) {
   };
 }
 
+function buildCheckoutOptions(searchParams: SearchParamsInput): CheckoutOptions {
+  const disableDiscounts =
+    readBoolean(searchParams.disableDiscounts) ||
+    readBoolean(searchParams.disableLoyalty) ||
+    readBoolean(searchParams.noLoyalty) ||
+    readBoolean(searchParams.specialOffer);
+
+  const specialOfferLabel =
+    readString(searchParams.offerLabel) ||
+    readString(searchParams.specialOfferLabel) ||
+    readString(searchParams.offerName) ||
+    readString(searchParams.lotTitle) ||
+    (disableDiscounts ? 'Лот недели' : undefined);
+
+  return {
+    disableDiscounts,
+    specialOfferLabel,
+  };
+}
+
 export default async function CheckoutPage({
   searchParams,
 }: {
@@ -167,5 +198,10 @@ export default async function CheckoutPage({
 }) {
   const resolvedSearchParams = await searchParams;
 
-  return <CheckoutClient initialForm={buildInitialForm(resolvedSearchParams)} />;
+  return (
+    <CheckoutClient
+      initialForm={buildInitialForm(resolvedSearchParams)}
+      checkoutOptions={buildCheckoutOptions(resolvedSearchParams)}
+    />
+  );
 }

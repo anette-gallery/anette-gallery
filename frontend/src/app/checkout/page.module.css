@@ -479,6 +479,23 @@
   align-items: center;
   gap: 26px;
   padding-top: 8px;
+  flex-wrap: wrap;
+}
+
+.removeItemButton {
+  border: none;
+  background: transparent;
+  color: #8d8d8d;
+  font-size: 14px;
+  line-height: 1.2;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.removeItemButton:hover {
+  color: #4b4b4b;
 }
 
 .qtyBox {
@@ -528,6 +545,26 @@
   font-size: 22px;
   font-weight: 600;
   color: #121212;
+}
+
+.emptyCartState {
+  padding: 8px 0 10px;
+}
+
+.emptyCartTitle {
+  margin: 0 0 8px;
+  font-size: 22px;
+  line-height: 1.2;
+  font-weight: 400;
+  font-family: Georgia, "Times New Roman", serif;
+  color: #1f1f1f;
+}
+
+.emptyCartText {
+  margin: 0;
+  color: #6c6c6c;
+  font-size: 15px;
+  line-height: 1.5;
 }
 
 .responseBox {
@@ -650,6 +687,11 @@
     grid-column: 1 / -1;
     justify-content: space-between;
     padding-left: 58px;
+  }
+
+  .removeItemButton {
+    width: 100%;
+    text-align: left;
   }
 
   .summaryMeta strong {

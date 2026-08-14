@@ -528,9 +528,16 @@ function getAcceptedCalculationMessage(
 
 type CheckoutClientProps = {
   initialForm: CheckoutFormState;
+  checkoutOptions?: {
+    disableDiscounts?: boolean;
+    specialOfferLabel?: string;
+  };
 };
 
-export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
+export default function CheckoutClient({
+  initialForm,
+  checkoutOptions,
+}: CheckoutClientProps) {
   const [form, setForm] = useState<CheckoutFormState>(() =>
     mergeStoredProfile(initialForm, readStoredProfile()),
   );
@@ -552,6 +559,8 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     const mergedForm = mergeStoredProfile(initialForm, readStoredProfile());
     return isPhoneReady(mergedForm.customer.phone);
   });
+  const discountsDisabled = Boolean(checkoutOptions?.disableDiscounts);
+  const specialOfferLabel = checkoutOptions?.specialOfferLabel?.trim() || 'Лот недели';
   const autoCalculatedLoyaltyRef = useRef(false);
   const calculationRequestIdRef = useRef(0);
 
@@ -563,15 +572,19 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     normalizeDiscountCode(form.promoCode) || normalizeDiscountCode(form.giftCardNumber),
   );
   const registerInLoyaltyProgram =
+    !discountsDisabled &&
     !hasManualDiscountInput &&
     Boolean(loyaltyRegistrationPhone) &&
     loyaltyRegistrationPhone === normalizedPhone;
   const calculationPayload = useMemo(
-    () => buildCalculationPayload(form, { registerInLoyaltyProgram }),
-    [form, registerInLoyaltyProgram],
+    () =>
+      discountsDisabled
+        ? null
+        : buildCalculationPayload(form, { registerInLoyaltyProgram }),
+    [discountsDisabled, form, registerInLoyaltyProgram],
   );
   const calculationKey = useMemo(
-    () => JSON.stringify(calculationPayload),
+    () => (calculationPayload ? JSON.stringify(calculationPayload) : 'discounts-disabled'),
     [calculationPayload],
   );
   const subtotal = useMemo(
@@ -582,9 +595,13 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
       ),
     [form.items],
   );
-  const hasStaleCalculation = Boolean(calculation) && lastCalculatedKey !== calculationKey;
+  const hasItems = form.items.length > 0;
+  const hasStaleCalculation =
+    !discountsDisabled && Boolean(calculation) && lastCalculatedKey !== calculationKey;
   const total =
-    hasStaleCalculation || !calculation ? subtotal : (calculation.total ?? calculation.totalAmount);
+    discountsDisabled || hasStaleCalculation || !calculation
+      ? subtotal
+      : (calculation.total ?? calculation.totalAmount);
   const orderStatus =
     typeof orderResponse?.status === 'string' ? orderResponse.status : null;
   const isOrderSuccessful =
@@ -595,11 +612,17 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     buildAddress(form.customer) ?? 'Россия, Москва';
   const storedProfileJson = useMemo(() => JSON.stringify(buildStoredProfile(form)), [form]);
   const canOfferLoyaltyRegistration =
-    !hasStaleCalculation && shouldOfferLoyaltyRegistration(calculation, subtotal);
+    !discountsDisabled &&
+    !hasStaleCalculation &&
+    shouldOfferLoyaltyRegistration(calculation, subtotal);
   const acceptedCalculationMessage =
-    !hasStaleCalculation ? getAcceptedCalculationMessage(calculation, subtotal) : null;
+    !discountsDisabled && !hasStaleCalculation
+      ? getAcceptedCalculationMessage(calculation, subtotal)
+      : null;
   const calculationSourceMessage =
-    !hasStaleCalculation ? getCalculationSourceMessage(calculation, subtotal) : null;
+    !discountsDisabled && !hasStaleCalculation
+      ? getCalculationSourceMessage(calculation, subtotal)
+      : null;
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -634,6 +657,8 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
 
   useEffect(() => {
     if (
+      discountsDisabled ||
+      !hasItems ||
       !hadKnownCustomerAtStart ||
       autoCalculatedLoyaltyRef.current ||
       !isPhoneReady(form.customer.phone) ||
@@ -648,6 +673,10 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     autoCalculatedLoyaltyRef.current = true;
 
     const runAutoCalculation = async () => {
+      if (!calculationPayload) {
+        return;
+      }
+
       setIsCalculating(true);
       setOrderError(null);
 
@@ -689,7 +718,9 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     };
   }, [
     calculationPayload,
+    discountsDisabled,
     form,
+    hasItems,
     hasManualDiscountInput,
     hadKnownCustomerAtStart,
     isCalculating,
@@ -710,6 +741,20 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     }));
     setOrderResponse(null);
     setOrderError(null);
+  }
+
+  function removeItem(index: number) {
+    stopAutoProfileCalculation();
+    setForm((current) => ({
+      ...current,
+      items: current.items.filter((_, currentIndex) => currentIndex !== index),
+    }));
+    setCalculation(null);
+    setLastCalculatedKey('');
+    setOrderResponse(null);
+    setOrderError(null);
+    setError(null);
+    setPaymentRedirectUrl(null);
   }
 
   async function runCalculation(
@@ -828,6 +873,19 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
   }
 
   async function handleRecalculate() {
+    if (discountsDisabled) {
+      setCalculation(null);
+      setLastCalculatedKey('discounts-disabled');
+      setError(null);
+      setOrderError(null);
+      return;
+    }
+
+    if (!hasItems) {
+      setError('Корзина пуста. Добавь хотя бы один товар.');
+      return;
+    }
+
     setIsCalculating(true);
     setOrderError(null);
     setError(null);
@@ -868,6 +926,15 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
   }
 
   async function handleLoyaltyRegistration() {
+    if (discountsDisabled) {
+      return;
+    }
+
+    if (!hasItems) {
+      setError('Корзина пуста. Добавь хотя бы один товар.');
+      return;
+    }
+
     if (!isPhoneReady(form.customer.phone)) {
       setError('Для регистрации в программе лояльности укажите телефон.');
       return;
@@ -909,6 +976,10 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
 
   const handleSubmit = async (event: React.SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!hasItems) {
+      setOrderError('Корзина пуста. Добавь хотя бы один товар, чтобы оформить заказ.');
+      return;
+    }
     setIsSubmitting(true);
     setOrderError(null);
     setError(null);
@@ -919,31 +990,42 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
     let orderId: string | null = null;
 
     try {
-      const resolvedForm = await resolveDiscountFields(form);
+      const resolvedForm = discountsDisabled
+        ? {
+            ...form,
+            promoCode: '',
+            giftCardNumber: '',
+            loyaltyCardNumber: '',
+          }
+        : await resolveDiscountFields(form);
 
       if (
         resolvedForm.promoCode !== form.promoCode ||
-        resolvedForm.giftCardNumber !== form.giftCardNumber
+        resolvedForm.giftCardNumber !== form.giftCardNumber ||
+        resolvedForm.loyaltyCardNumber !== form.loyaltyCardNumber
       ) {
         setForm(resolvedForm);
       }
 
       let latestCalculation: CheckoutCalculationResponse | null = null;
-      try {
-        latestCalculation = await runCalculation(
-          buildCalculationPayload(resolvedForm, { registerInLoyaltyProgram }),
-          {
-            persistError: false,
-          },
-        );
-      } catch (calcError) {
-        const isTimeout =
-          (calcError instanceof Error && calcError.name === 'AbortError') ||
-          (calcError instanceof Error && /долго отвечает|timeout|timed out|AbortError/i.test(calcError.message));
-        if (!isTimeout) {
-          throw calcError;
+      if (!discountsDisabled) {
+        try {
+          latestCalculation = await runCalculation(
+            buildCalculationPayload(resolvedForm, { registerInLoyaltyProgram }),
+            {
+              persistError: false,
+            },
+          );
+        } catch (calcError) {
+          const isTimeout =
+            (calcError instanceof Error && calcError.name === 'AbortError') ||
+            (calcError instanceof Error &&
+              /долго отвечает|timeout|timed out|AbortError/i.test(calcError.message));
+          if (!isTimeout) {
+            throw calcError;
+          }
+          latestCalculation = null;
         }
-        latestCalculation = null;
       }
 
       const orderTotal =
@@ -952,7 +1034,20 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
         subtotal;
 
       const response = await createOrder(
-        buildOrderPayload(resolvedForm, orderTotal),
+        buildOrderPayload(
+          {
+            ...resolvedForm,
+            comment: discountsDisabled
+              ? [
+                  resolvedForm.comment.trim(),
+                  `Спецтовар: ${specialOfferLabel}. Скидки и программа лояльности отключены.`,
+                ]
+                  .filter(Boolean)
+                  .join('. ')
+              : resolvedForm.comment,
+          },
+          orderTotal,
+        ),
       );
 
       setOrderResponse(response);
@@ -1279,100 +1374,124 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
             </section>
 
             <section className={styles.formSection}>
-              <h2 className={styles.sectionTitle}>Промокод и сертификат</h2>
-              <div className={styles.stackedFields}>
-                <label className={styles.lineField}>
-                  <input
-                    value={form.promoCode}
-                      onChange={(event) =>
-                        handleManualDiscountFieldChange('promoCode', event.target.value)
-                      }
-                    placeholder="Введите промокод"
-                  />
-                </label>
+              <h2 className={styles.sectionTitle}>
+                {discountsDisabled ? 'Спецусловия' : 'Промокод и сертификат'}
+              </h2>
 
-                <label className={styles.lineField}>
-                  <input
-                    value={form.giftCardNumber}
-                      onChange={(event) =>
-                        handleManualDiscountFieldChange('giftCardNumber', event.target.value)
-                      }
-                    placeholder="Номер сертификата"
-                  />
-                </label>
-              </div>
-
-              <label className={styles.lineField}>
-                <input
-                  value={form.loyaltyCardNumber}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      loyaltyCardNumber: event.target.value,
-                    }))
-                  }
-                  placeholder="Если есть карта"
-                />
-              </label>
-
-              <div className={styles.inlineActions}>
-                <button
-                  className={styles.lightButton}
-                  type="button"
-                  onClick={handleRecalculate}
-                  disabled={isCalculating || isSubmitting}
-                >
-                    {isCalculating
-                      ? calculationProgressLabel || 'Проверяем...'
-                      : 'Проверить скидку'}
-                </button>
-
-                {hasStaleCalculation ? (
-                  <span className={styles.mutedText}>Цена изменена, пересчитайте заказ</span>
-                ) : null}
-              </div>
-
-                {hadKnownCustomerAtStart && !calculation && !error ? (
-                  <p className={styles.noteText}>
-                    Скидку для вашего профиля проверяем автоматически.
+              {discountsDisabled ? (
+                <div className={styles.acceptedBadge}>
+                  <p className={styles.acceptedBadgeTitle}>{specialOfferLabel}</p>
+                  <p className={styles.acceptedBadgeText}>
+                    Для этого предложения действует прямая оплата через наш checkout.
+                    Скидки, промокоды, сертификаты и программа лояльности не применяются.
                   </p>
-                ) : null}
+                </div>
+              ) : (
+                <>
+                  <div className={styles.stackedFields}>
+                    <label className={styles.lineField}>
+                      <input
+                        value={form.promoCode}
+                        onChange={(event) =>
+                          handleManualDiscountFieldChange('promoCode', event.target.value)
+                        }
+                        placeholder="Введите промокод"
+                      />
+                    </label>
 
-              {!hasStaleCalculation && getCalculationStatusMessage(calculation, subtotal) ? (
-                <p className={styles.calculationMessage}>
-                  {getCalculationStatusMessage(calculation, subtotal)}
-                </p>
-              ) : null}
-
-                {!hasStaleCalculation && acceptedCalculationMessage ? (
-                  <div className={styles.acceptedBadge}>
-                    <p className={styles.acceptedBadgeTitle}>Принято</p>
-                    <p className={styles.acceptedBadgeText}>{acceptedCalculationMessage}</p>
-                    {calculationSourceMessage ? (
-                      <p className={styles.acceptedBadgeMeta}>{calculationSourceMessage}</p>
-                    ) : null}
+                    <label className={styles.lineField}>
+                      <input
+                        value={form.giftCardNumber}
+                        onChange={(event) =>
+                          handleManualDiscountFieldChange(
+                            'giftCardNumber',
+                            event.target.value,
+                          )
+                        }
+                        placeholder="Номер сертификата"
+                      />
+                    </label>
                   </div>
-                ) : null}
 
-                {canOfferLoyaltyRegistration ? (
-                  <div className={styles.loyaltyCard}>
-                    <p className={styles.loyaltyTitle}>Программа лояльности</p>
-                    <p className={styles.loyaltyText}>
-                      Если система еще не нашла ваш профиль, зарегистрируйтесь перед
-                      оплатой. После этого корзина пересчитается автоматически.
-                    </p>
+                  <label className={styles.lineField}>
+                    <input
+                      value={form.loyaltyCardNumber}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          loyaltyCardNumber: event.target.value,
+                        }))
+                      }
+                      placeholder="Если есть карта"
+                    />
+                  </label>
+
+                  <div className={styles.inlineActions}>
                     <button
                       className={styles.lightButton}
                       type="button"
-                      onClick={handleLoyaltyRegistration}
+                      onClick={handleRecalculate}
                       disabled={isCalculating || isSubmitting}
                     >
-                      {registerInLoyaltyProgram && isCalculating
-                        ? 'Подключаем...'
-                        : 'Зарегистрироваться и пересчитать'}
+                      {isCalculating
+                        ? calculationProgressLabel || 'Проверяем...'
+                        : 'Проверить скидку'}
                     </button>
+
+                    {hasStaleCalculation ? (
+                      <span className={styles.mutedText}>
+                        Цена изменена, пересчитайте заказ
+                      </span>
+                    ) : null}
                   </div>
-                ) : null}
+
+                  {hadKnownCustomerAtStart && !calculation && !error ? (
+                    <p className={styles.noteText}>
+                      Скидку для вашего профиля проверяем автоматически.
+                    </p>
+                  ) : null}
+
+                  {!hasStaleCalculation && getCalculationStatusMessage(calculation, subtotal) ? (
+                    <p className={styles.calculationMessage}>
+                      {getCalculationStatusMessage(calculation, subtotal)}
+                    </p>
+                  ) : null}
+
+                  {!hasStaleCalculation && acceptedCalculationMessage ? (
+                    <div className={styles.acceptedBadge}>
+                      <p className={styles.acceptedBadgeTitle}>Принято</p>
+                      <p className={styles.acceptedBadgeText}>
+                        {acceptedCalculationMessage}
+                      </p>
+                      {calculationSourceMessage ? (
+                        <p className={styles.acceptedBadgeMeta}>
+                          {calculationSourceMessage}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {canOfferLoyaltyRegistration ? (
+                    <div className={styles.loyaltyCard}>
+                      <p className={styles.loyaltyTitle}>Программа лояльности</p>
+                      <p className={styles.loyaltyText}>
+                        Если система еще не нашла ваш профиль, зарегистрируйтесь перед
+                        оплатой. После этого корзина пересчитается автоматически.
+                      </p>
+                      <button
+                        className={styles.lightButton}
+                        type="button"
+                        onClick={handleLoyaltyRegistration}
+                        disabled={isCalculating || isSubmitting}
+                      >
+                        {registerInLoyaltyProgram && isCalculating
+                          ? 'Подключаем...'
+                          : 'Зарегистрироваться и пересчитать'}
+                      </button>
+                    </div>
+                  ) : null}
+                </>
+              )}
             </section>
 
             <section className={styles.formSection}>
@@ -1467,7 +1586,7 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
               <button
                 className={styles.primaryButton}
                 type="submit"
-                disabled={isSubmitting || isCalculating || !form.consentAccepted}
+                disabled={isSubmitting || isCalculating || !form.consentAccepted || !hasItems}
               >
                 {isSubmitting ? 'Оформляем заказ...' : 'Оформить заказ'}
               </button>
@@ -1529,45 +1648,62 @@ export default function CheckoutClient({ initialForm }: CheckoutClientProps) {
 
           <aside className={styles.rightColumn}>
             <div className={styles.summaryCard}>
-              {form.items.map((item, index) => (
-                <article key={`${item.sku}-${index}`} className={styles.productRow}>
-                  <div className={styles.productThumb}>
-                    {item.image ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={item.image} alt={item.title ?? 'Товар'} />
-                    ) : (
-                      item.title?.slice(0, 1).toUpperCase() ?? 'A'
-                    )}
-                  </div>
-
-                  <div className={styles.productInfo}>
-                    <p className={styles.productTitle}>
-                      {item.title?.trim() || 'Товар без названия'}
-                    </p>
-                    <p className={styles.productMeta}>Артикул: {item.sku}</p>
-                  </div>
-
-                  <div className={styles.productControls}>
-                    <div className={styles.qtyBox}>
-                      <button
-                        type="button"
-                        onClick={() => updateItemQuantity(index, item.quantity - 1)}
-                      >
-                        -
-                      </button>
-                      <span>{item.quantity}</span>
-                      <button
-                        type="button"
-                        onClick={() => updateItemQuantity(index, item.quantity + 1)}
-                      >
-                        +
-                      </button>
+              {hasItems ? (
+                form.items.map((item, index) => (
+                  <article key={`${item.sku}-${index}`} className={styles.productRow}>
+                    <div className={styles.productThumb}>
+                      {item.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={item.image} alt={item.title ?? 'Товар'} />
+                      ) : (
+                        item.title?.slice(0, 1).toUpperCase() ?? 'A'
+                      )}
                     </div>
 
-                    <div className={styles.priceBox}>{formatCurrency(item.price * item.quantity)}</div>
-                  </div>
-                </article>
-              ))}
+                    <div className={styles.productInfo}>
+                      <p className={styles.productTitle}>
+                        {item.title?.trim() || 'Товар без названия'}
+                      </p>
+                      <p className={styles.productMeta}>Артикул: {item.sku}</p>
+                    </div>
+
+                    <div className={styles.productControls}>
+                      <button
+                        type="button"
+                        className={styles.removeItemButton}
+                        onClick={() => removeItem(index)}
+                        aria-label={`Удалить товар ${item.title?.trim() || item.sku}`}
+                      >
+                        Удалить
+                      </button>
+                      <div className={styles.qtyBox}>
+                        <button
+                          type="button"
+                          onClick={() => updateItemQuantity(index, item.quantity - 1)}
+                        >
+                          -
+                        </button>
+                        <span>{item.quantity}</span>
+                        <button
+                          type="button"
+                          onClick={() => updateItemQuantity(index, item.quantity + 1)}
+                        >
+                          +
+                        </button>
+                      </div>
+
+                      <div className={styles.priceBox}>{formatCurrency(item.price * item.quantity)}</div>
+                    </div>
+                  </article>
+                ))
+              ) : (
+                <div className={styles.emptyCartState}>
+                  <p className={styles.emptyCartTitle}>Корзина пуста</p>
+                  <p className={styles.emptyCartText}>
+                    Добавь товары в корзину и возвращайся к оформлению заказа.
+                  </p>
+                </div>
+              )}
 
               <div className={styles.summaryMeta}>
                 <p>{deliveryOption.summary}: 0 ₽</p>
