@@ -11,6 +11,8 @@
   var STYLE_ELEMENT_ID = 't-custom-checkout-button-styles';
   var CART_ROOT_SELECTOR =
     '.t706__cartwin, .t706__cartpage, .t706__sidebar, .t706, .t-store__cart, .t228__cart, .js-store-cart';
+  var CART_CHECKOUT_AREA_SELECTOR =
+    '.t706__cartwin-bottom, .t706__cartpage-bottom, .t706__sidebar-bottom, .t706__orderform, .t-store__cart__footer, .js-store-cart, form[action*="order"], form[action*="checkout"]';
   var CART_ACTION_SELECTOR =
     'button, a, input[type="submit"], input[type="button"], [role="button"], .t706__cartwin-proceed, .t706__cartpage-open-form, .t706__sidebar-continue, .t706__orderform-btn, .js-store-order, .js-cart-order, .js-tcart-checkout';
   var CART_CHECKOUT_CLASS_RE =
@@ -695,6 +697,7 @@
         ? node.className.toLowerCase()
         : '';
     var inCartPopup = !!node.closest(CART_ROOT_SELECTOR);
+    var inCheckoutArea = !!node.closest(CART_CHECKOUT_AREA_SELECTOR);
     var ariaLabel = (
       (node.getAttribute && node.getAttribute('aria-label')) ||
       (node.getAttribute && node.getAttribute('title')) ||
@@ -719,8 +722,17 @@
       /оформить|checkout|place order/.test(ariaLabel) ||
       /checkout|order|submit/.test(dataAction) ||
       CART_CHECKOUT_CLASS_RE.test(className);
+    var looksLikeStrongCheckoutAction =
+      /оформить заказ|перейти к оформлению|checkout|place order/i.test(text) ||
+      /оформить заказ|checkout|place order/i.test(ariaLabel) ||
+      CART_CHECKOUT_CLASS_RE.test(className);
 
-    return inCartPopup && !looksLikeIgnoredControl && looksLikeCheckoutAction;
+    return (
+      !looksLikeIgnoredControl &&
+      ((inCartPopup && looksLikeCheckoutAction) ||
+        (inCheckoutArea && looksLikeStrongCheckoutAction) ||
+        looksLikeStrongCheckoutAction)
+    );
   }
 
   function bindCartButtons() {
