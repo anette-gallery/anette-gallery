@@ -13,6 +13,10 @@
     '.t706__cartwin, .t706__cartpage, .t706__sidebar, .t706, .t-store__cart, .t228__cart, .js-store-cart';
   var CART_ACTION_SELECTOR =
     'button, a, input[type="submit"], input[type="button"], [role="button"], .t706__cartwin-proceed, .t706__cartpage-open-form, .t706__sidebar-continue, .t706__orderform-btn, .js-store-order, .js-cart-order, .js-tcart-checkout';
+  var CART_CHECKOUT_CLASS_RE =
+    /cartwin-proceed|cartpage-open-form|sidebar-continue|orderform-btn|js-store-order|js-cart-order|js-tcart-checkout|tcart__order|cart__order|checkout-btn|checkout-button/i;
+  var CART_IGNORE_CLASS_RE =
+    /plus|minus|qty|quantity|amount|count|remove|delete|close|clear|cancel|inc|dec|control/i;
 
   function injectButtonStyles() {
     if (document.getElementById(STYLE_ELEMENT_ID)) {
@@ -691,12 +695,32 @@
         ? node.className.toLowerCase()
         : '';
     var inCartPopup = !!node.closest(CART_ROOT_SELECTOR);
-    var looksLikeCheckoutAction =
-      /оформ|заказ|checkout|order/.test(text) ||
-      /checkout|order|cart/.test(href) ||
-      /order|checkout|cart|cartpage-open-form|sidebar-continue/.test(className);
+    var ariaLabel = (
+      (node.getAttribute && node.getAttribute('aria-label')) ||
+      (node.getAttribute && node.getAttribute('title')) ||
+      ''
+    ).toLowerCase();
+    var dataAction = (
+      (node.getAttribute && node.getAttribute('data-action')) ||
+      (node.getAttribute && node.getAttribute('data-cart-action')) ||
+      ''
+    ).toLowerCase();
 
-    return inCartPopup && looksLikeCheckoutAction;
+    var looksLikeIgnoredControl =
+      /удал|убрать|remove|delete|close|закрыть|очистить|clear|\+|-/.test(text) ||
+      /remove|delete|close|clear/.test(href) ||
+      /удал|убрать|remove|delete|close|закрыть|очистить|clear|\+|-/.test(ariaLabel) ||
+      /remove|delete|close|clear|plus|minus|inc|dec/.test(dataAction) ||
+      CART_IGNORE_CLASS_RE.test(className);
+
+    var looksLikeCheckoutAction =
+      /оформить заказ|перейти к оформлению|checkout|place order|оформить/i.test(text) ||
+      /checkout|order/.test(href) ||
+      /оформить|checkout|place order/.test(ariaLabel) ||
+      /checkout|order|submit/.test(dataAction) ||
+      CART_CHECKOUT_CLASS_RE.test(className);
+
+    return inCartPopup && !looksLikeIgnoredControl && looksLikeCheckoutAction;
   }
 
   function bindCartButtons() {
