@@ -8,11 +8,15 @@
     'Оформить заказ';
   var BRIDGE_ATTR = 'data-custom-checkout-bound';
   var BUTTON_CLASS = 't-custom-checkout-button';
+  var REMOVE_BUTTON_ATTR = 'data-custom-cart-remove-bound';
+  var REMOVE_BUTTON_CLASS = 't-custom-cart-remove';
   var STYLE_ELEMENT_ID = 't-custom-checkout-button-styles';
   var CART_ROOT_SELECTOR =
     '.t706__cartwin, .t706__cartpage, .t706__sidebar, .t706, .t-store__cart, .t228__cart, .js-store-cart';
   var CART_ACTION_SELECTOR =
     'button, a, input[type="submit"], input[type="button"], [role="button"], .t706__cartwin-proceed, .t706__cartpage-open-form, .t706__sidebar-continue, .t706__orderform-btn, .js-store-order, .js-cart-order, .js-tcart-checkout';
+  var CART_PRODUCT_SELECTOR =
+    '.t706__product, .t706__cartwin-prod, .t706__cartpage-prod, .t706__sidebar-prod, .js-product';
 
   function injectButtonStyles() {
     if (document.getElementById(STYLE_ELEMENT_ID)) {
@@ -87,6 +91,32 @@
       'display:none !important;' +
       'pointer-events:none !important;' +
       'visibility:hidden !important;' +
+      '}' +
+      '.' +
+      REMOVE_BUTTON_CLASS +
+      '{' +
+      'display:inline-flex !important;' +
+      'align-items:center !important;' +
+      'margin-top:8px !important;' +
+      'padding:0 !important;' +
+      'border:0 !important;' +
+      'background:none !important;' +
+      'color:#c1221f !important;' +
+      'font-size:13px !important;' +
+      'line-height:1.2 !important;' +
+      'font-weight:500 !important;' +
+      'cursor:pointer !important;' +
+      'text-decoration:underline !important;' +
+      'box-shadow:none !important;' +
+      '}' +
+      '.' +
+      REMOVE_BUTTON_CLASS +
+      ':hover,' +
+      '.' +
+      REMOVE_BUTTON_CLASS +
+      ':focus{' +
+      'color:#a31b18 !important;' +
+      'outline:none !important;' +
       '}';
 
     document.head.appendChild(style);
@@ -695,6 +725,69 @@
     return null;
   }
 
+  function findNativeRemoveButton(productNode) {
+    if (!productNode || productNode.nodeType !== 1) {
+      return null;
+    }
+
+    return productNode.querySelector(
+      '.t706__product-del, .t706__cartwin-prod-del, .t706__cartpage-prod-del, .t706__sidebar-prod-del, [class*="product-del"]'
+    );
+  }
+
+  function triggerNativeRemove(productNode) {
+    var nativeRemoveButton = findNativeRemoveButton(productNode);
+
+    if (!nativeRemoveButton) {
+      return false;
+    }
+
+    nativeRemoveButton.dispatchEvent(
+      new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+      })
+    );
+
+    return true;
+  }
+
+  function bindRemoveButtons() {
+    var productNodes = document.querySelectorAll(CART_PRODUCT_SELECTOR);
+
+    Array.prototype.forEach.call(productNodes, function (productNode) {
+      if (!findNativeRemoveButton(productNode)) {
+        return;
+      }
+
+      var removeHost =
+        productNode.querySelector(
+          '.t706__product-title, .t706__cartwin-prodtitle, .t706__cartpage-prodtitle, .t706__sidebar-prodtitle, .t706__cartwin-prodname, .js-product-name'
+        ) || productNode;
+
+      var existingButton = removeHost.querySelector('.' + REMOVE_BUTTON_CLASS);
+
+      if (existingButton || removeHost.getAttribute(REMOVE_BUTTON_ATTR) === '1') {
+        return;
+      }
+
+      var removeButton = document.createElement('button');
+      removeButton.type = 'button';
+      removeButton.className = REMOVE_BUTTON_CLASS;
+      removeButton.textContent = 'Удалить';
+      removeButton.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        triggerNativeRemove(productNode);
+      });
+
+      removeHost.setAttribute(REMOVE_BUTTON_ATTR, '1');
+      removeHost.appendChild(removeButton);
+    });
+  }
+
   function isCartButton(node) {
     if (!node || node.nodeType !== 1) {
       return false;
@@ -717,6 +810,7 @@
 
   function bindCartButtons() {
     injectButtonStyles();
+    bindRemoveButtons();
 
     var nodes = document.querySelectorAll(CART_ACTION_SELECTOR);
 
