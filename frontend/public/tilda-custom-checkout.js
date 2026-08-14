@@ -11,8 +11,6 @@
   var STYLE_ELEMENT_ID = 't-custom-checkout-button-styles';
   var CART_ROOT_SELECTOR =
     '.t706__cartwin, .t706__cartpage, .t706__sidebar, .t706, .t-store__cart, .t228__cart, .js-store-cart';
-  var CART_CHECKOUT_AREA_SELECTOR =
-    '.t706__cartwin-bottom, .t706__cartpage-bottom, .t706__sidebar-bottom, .t706__orderform, .t-store__cart__footer, .js-store-cart, form[action*="order"], form[action*="checkout"]';
   var CART_ACTION_SELECTOR =
     'button, a, input[type="submit"], input[type="button"], [role="button"], .t706__cartwin-proceed, .t706__cartpage-open-form, .t706__sidebar-continue, .t706__orderform-btn, .js-store-order, .js-cart-order, .js-tcart-checkout';
   var CART_CHECKOUT_CLASS_RE =
@@ -685,6 +683,22 @@
     return null;
   }
 
+  function findCheckoutButtonInForm(form) {
+    if (!form || form.nodeType !== 1 || typeof form.querySelectorAll !== 'function') {
+      return null;
+    }
+
+    var nodes = form.querySelectorAll(CART_ACTION_SELECTOR);
+
+    for (var i = 0; i < nodes.length; i += 1) {
+      if (isCartButton(nodes[i])) {
+        return nodes[i];
+      }
+    }
+
+    return null;
+  }
+
   function isCartButton(node) {
     if (!node || node.nodeType !== 1) {
       return false;
@@ -697,7 +711,6 @@
         ? node.className.toLowerCase()
         : '';
     var inCartPopup = !!node.closest(CART_ROOT_SELECTOR);
-    var inCheckoutArea = !!node.closest(CART_CHECKOUT_AREA_SELECTOR);
     var ariaLabel = (
       (node.getAttribute && node.getAttribute('aria-label')) ||
       (node.getAttribute && node.getAttribute('title')) ||
@@ -722,17 +735,8 @@
       /оформить|checkout|place order/.test(ariaLabel) ||
       /checkout|order|submit/.test(dataAction) ||
       CART_CHECKOUT_CLASS_RE.test(className);
-    var looksLikeStrongCheckoutAction =
-      /оформить заказ|перейти к оформлению|checkout|place order/i.test(text) ||
-      /оформить заказ|checkout|place order/i.test(ariaLabel) ||
-      CART_CHECKOUT_CLASS_RE.test(className);
 
-    return (
-      !looksLikeIgnoredControl &&
-      ((inCartPopup && looksLikeCheckoutAction) ||
-        (inCheckoutArea && looksLikeStrongCheckoutAction) ||
-        looksLikeStrongCheckoutAction)
-    );
+    return inCartPopup && !looksLikeIgnoredControl && looksLikeCheckoutAction;
   }
 
   function bindCartButtons() {
@@ -776,6 +780,21 @@
     }
 
     if (!form.closest(CART_ROOT_SELECTOR)) {
+      return;
+    }
+
+    var submitter = findCartActionNode(event.submitter);
+
+    if (submitter) {
+      if (!isCartButton(submitter)) {
+        return;
+      }
+
+      openCustomCheckout(event);
+      return;
+    }
+
+    if (!findCheckoutButtonInForm(form)) {
       return;
     }
 
