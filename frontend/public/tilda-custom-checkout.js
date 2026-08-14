@@ -71,7 +71,23 @@
       BUTTON_CLASS +
       ',.t706__cartpage .' +
       BUTTON_CLASS +
-      '{margin-top:8px !important;}';
+      '{margin-top:8px !important;}' +
+      '.t706__product-del,' +
+      '.t706__product-del-wrapper,' +
+      '.t706__product-minus,' +
+      '.t706__cartwin .t706__product-del,' +
+      '.t706__cartwin .t706__product-del-wrapper,' +
+      '.t706__cartwin .t706__product-minus,' +
+      '.t706__cartpage .t706__product-del,' +
+      '.t706__cartpage .t706__product-del-wrapper,' +
+      '.t706__cartpage .t706__product-minus,' +
+      '.t706__sidebar .t706__product-del,' +
+      '.t706__sidebar .t706__product-del-wrapper,' +
+      '.t706__sidebar .t706__product-minus{' +
+      'display:none !important;' +
+      'pointer-events:none !important;' +
+      'visibility:hidden !important;' +
+      '}';
 
     document.head.appendChild(style);
   }
