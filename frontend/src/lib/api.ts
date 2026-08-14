@@ -8,13 +8,19 @@ import type {
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || '/api/v1';
-const API_REQUEST_TIMEOUT_MS = 15000;
+const DEFAULT_API_TIMEOUT_MS = 30000;
+const LONG_API_TIMEOUT_MS = 90000;
 
-async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
+async function apiRequest<T>(
+  path: string,
+  init: RequestInit,
+  options: { timeoutMs?: number } = {},
+): Promise<T> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_API_TIMEOUT_MS;
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => {
     controller.abort();
-  }, API_REQUEST_TIMEOUT_MS);
+  }, timeoutMs);
 
   let response: Response;
 
@@ -68,12 +74,12 @@ export function createOrder(payload: CreateOrderPayload) {
   return apiRequest<Record<string, unknown>>('/orders', {
     method: 'POST',
     body: JSON.stringify(payload),
-  });
+  }, { timeoutMs: LONG_API_TIMEOUT_MS });
 }
 
 export function createPaykeeperPayment(payload: CreatePaymentPayload) {
   return apiRequest<CreatePaymentResponse>('/payments/paykeeper/create', {
     method: 'POST',
     body: JSON.stringify(payload),
-  });
+  }, { timeoutMs: LONG_API_TIMEOUT_MS });
 }

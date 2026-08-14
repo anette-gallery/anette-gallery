@@ -552,6 +552,7 @@ export default function CheckoutClient({
   const [calculationProgressLabel, setCalculationProgressLabel] = useState<string | null>(
     null,
   );
+  const [brokenImageKeys, setBrokenImageKeys] = useState<ReadonlySet<string>>(new Set());
   const [loyaltyRegistrationPhone, setLoyaltyRegistrationPhone] = useState<string | null>(() =>
     readStoredLoyaltyPhone(),
   );
@@ -1126,6 +1127,20 @@ export default function CheckoutClient({
         );
       }
     } catch (submitError) {
+      const isAbort =
+        (submitError instanceof Error && submitError.name === 'AbortError') ||
+        /Fetch is aborted|request cancelled|signal is aborted/i.test(
+          submitError instanceof Error
+            ? submitError.message
+            : String(submitError ?? ''),
+        );
+      if (isAbort) {
+        setOrderError(
+          'Сервер обрабатывает запрос дольше обычного. Подожди немного и попробуй снова — обычно это помогает.',
+        );
+        setOrderResponse(null);
+        return;
+      }
       const message =
         submitError instanceof Error
           ? submitError.message
@@ -1373,126 +1388,114 @@ export default function CheckoutClient({
               </label>
             </section>
 
-            <section className={styles.formSection}>
-              <h2 className={styles.sectionTitle}>
-                {discountsDisabled ? 'Спецусловия' : 'Промокод и сертификат'}
-              </h2>
+            {!discountsDisabled ? (
+              <section className={styles.formSection}>
+                <h2 className={styles.sectionTitle}>Промокод и сертификат</h2>
 
-              {discountsDisabled ? (
-                <div className={styles.acceptedBadge}>
-                  <p className={styles.acceptedBadgeTitle}>{specialOfferLabel}</p>
-                  <p className={styles.acceptedBadgeText}>
-                    Для этого предложения действует прямая оплата через наш checkout.
-                    Скидки, промокоды, сертификаты и программа лояльности не применяются.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <div className={styles.stackedFields}>
-                    <label className={styles.lineField}>
-                      <input
-                        value={form.promoCode}
-                        onChange={(event) =>
-                          handleManualDiscountFieldChange('promoCode', event.target.value)
-                        }
-                        placeholder="Введите промокод"
-                      />
-                    </label>
-
-                    <label className={styles.lineField}>
-                      <input
-                        value={form.giftCardNumber}
-                        onChange={(event) =>
-                          handleManualDiscountFieldChange(
-                            'giftCardNumber',
-                            event.target.value,
-                          )
-                        }
-                        placeholder="Номер сертификата"
-                      />
-                    </label>
-                  </div>
-
+                <div className={styles.stackedFields}>
                   <label className={styles.lineField}>
                     <input
-                      value={form.loyaltyCardNumber}
+                      value={form.promoCode}
                       onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          loyaltyCardNumber: event.target.value,
-                        }))
+                        handleManualDiscountFieldChange('promoCode', event.target.value)
                       }
-                      placeholder="Если есть карта"
+                      placeholder="Введите промокод"
                     />
                   </label>
 
-                  <div className={styles.inlineActions}>
+                  <label className={styles.lineField}>
+                    <input
+                      value={form.giftCardNumber}
+                      onChange={(event) =>
+                        handleManualDiscountFieldChange(
+                          'giftCardNumber',
+                          event.target.value,
+                        )
+                      }
+                      placeholder="Номер сертификата"
+                    />
+                  </label>
+                </div>
+
+                <label className={styles.lineField}>
+                  <input
+                    value={form.loyaltyCardNumber}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        loyaltyCardNumber: event.target.value,
+                      }))
+                    }
+                    placeholder="Если есть карта"
+                  />
+                </label>
+
+                <div className={styles.inlineActions}>
+                  <button
+                    className={styles.lightButton}
+                    type="button"
+                    onClick={handleRecalculate}
+                    disabled={isCalculating || isSubmitting}
+                  >
+                    {isCalculating
+                      ? calculationProgressLabel || 'Проверяем...'
+                      : 'Проверить скидку'}
+                  </button>
+
+                  {hasStaleCalculation ? (
+                    <span className={styles.mutedText}>
+                      Цена изменена, пересчитайте заказ
+                    </span>
+                  ) : null}
+                </div>
+
+                {hadKnownCustomerAtStart && !calculation && !error ? (
+                  <p className={styles.noteText}>
+                    Скидку для вашего профиля проверяем автоматически.
+                  </p>
+                ) : null}
+
+                {!hasStaleCalculation && getCalculationStatusMessage(calculation, subtotal) ? (
+                  <p className={styles.calculationMessage}>
+                    {getCalculationStatusMessage(calculation, subtotal)}
+                  </p>
+                ) : null}
+
+                {!hasStaleCalculation && acceptedCalculationMessage ? (
+                  <div className={styles.acceptedBadge}>
+                    <p className={styles.acceptedBadgeTitle}>Принято</p>
+                    <p className={styles.acceptedBadgeText}>
+                      {acceptedCalculationMessage}
+                    </p>
+                    {calculationSourceMessage ? (
+                      <p className={styles.acceptedBadgeMeta}>
+                        {calculationSourceMessage}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {canOfferLoyaltyRegistration ? (
+                  <div className={styles.loyaltyCard}>
+                    <p className={styles.loyaltyTitle}>Программа лояльности</p>
+                    <p className={styles.loyaltyText}>
+                      Если система еще не нашла ваш профиль, зарегистрируйтесь перед
+                      оплатой. После этого корзина пересчитается автоматически.
+                    </p>
                     <button
                       className={styles.lightButton}
                       type="button"
-                      onClick={handleRecalculate}
+                      onClick={handleLoyaltyRegistration}
                       disabled={isCalculating || isSubmitting}
                     >
-                      {isCalculating
-                        ? calculationProgressLabel || 'Проверяем...'
-                        : 'Проверить скидку'}
+                      {registerInLoyaltyProgram && isCalculating
+                        ? 'Подключаем...'
+                        : 'Зарегистрироваться и пересчитать'}
                     </button>
-
-                    {hasStaleCalculation ? (
-                      <span className={styles.mutedText}>
-                        Цена изменена, пересчитайте заказ
-                      </span>
-                    ) : null}
                   </div>
-
-                  {hadKnownCustomerAtStart && !calculation && !error ? (
-                    <p className={styles.noteText}>
-                      Скидку для вашего профиля проверяем автоматически.
-                    </p>
-                  ) : null}
-
-                  {!hasStaleCalculation && getCalculationStatusMessage(calculation, subtotal) ? (
-                    <p className={styles.calculationMessage}>
-                      {getCalculationStatusMessage(calculation, subtotal)}
-                    </p>
-                  ) : null}
-
-                  {!hasStaleCalculation && acceptedCalculationMessage ? (
-                    <div className={styles.acceptedBadge}>
-                      <p className={styles.acceptedBadgeTitle}>Принято</p>
-                      <p className={styles.acceptedBadgeText}>
-                        {acceptedCalculationMessage}
-                      </p>
-                      {calculationSourceMessage ? (
-                        <p className={styles.acceptedBadgeMeta}>
-                          {calculationSourceMessage}
-                        </p>
-                      ) : null}
-                    </div>
-                  ) : null}
-
-                  {canOfferLoyaltyRegistration ? (
-                    <div className={styles.loyaltyCard}>
-                      <p className={styles.loyaltyTitle}>Программа лояльности</p>
-                      <p className={styles.loyaltyText}>
-                        Если система еще не нашла ваш профиль, зарегистрируйтесь перед
-                        оплатой. После этого корзина пересчитается автоматически.
-                      </p>
-                      <button
-                        className={styles.lightButton}
-                        type="button"
-                        onClick={handleLoyaltyRegistration}
-                        disabled={isCalculating || isSubmitting}
-                      >
-                        {registerInLoyaltyProgram && isCalculating
-                          ? 'Подключаем...'
-                          : 'Зарегистрироваться и пересчитать'}
-                      </button>
-                    </div>
-                  ) : null}
-                </>
-              )}
-            </section>
+                ) : null}
+              </section>
+            ) : null}
 
             <section className={styles.formSection}>
               <h2 className={styles.sectionTitle}>Комментарий</h2>
@@ -1649,16 +1652,39 @@ export default function CheckoutClient({
           <aside className={styles.rightColumn}>
             <div className={styles.summaryCard}>
               {hasItems ? (
-                form.items.map((item, index) => (
-                  <article key={`${item.sku}-${index}`} className={styles.productRow}>
-                    <div className={styles.productThumb}>
-                      {item.image ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={item.image} alt={item.title ?? 'Товар'} />
-                      ) : (
-                        item.title?.slice(0, 1).toUpperCase() ?? 'A'
-                      )}
-                    </div>
+                form.items.map((item, index) => {
+                  const thumbKey = `${item.sku}-${index}`;
+                  const hasBrokenImage = brokenImageKeys.has(thumbKey);
+                  const hasUsableImage = Boolean(item.image?.trim()) && !hasBrokenImage;
+                  const initial =
+                    (item.title?.trim() || item.sku || 'A')
+                      .trim()
+                      .charAt(0)
+                      .toUpperCase() || 'A';
+
+                  return (
+                    <article key={thumbKey} className={styles.productRow}>
+                      <div className={styles.productThumb}>
+                        {hasUsableImage ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={item.image!.trim()}
+                            alt={item.title ?? 'Товар'}
+                            onError={() => {
+                              setBrokenImageKeys((current) => {
+                                if (current.has(thumbKey)) {
+                                  return current;
+                                }
+                                const next = new Set(current);
+                                next.add(thumbKey);
+                                return next;
+                              });
+                            }}
+                          />
+                        ) : (
+                          <span aria-hidden="true">{initial}</span>
+                        )}
+                      </div>
 
                     <div className={styles.productInfo}>
                       <p className={styles.productTitle}>
@@ -1695,7 +1721,8 @@ export default function CheckoutClient({
                       <div className={styles.priceBox}>{formatCurrency(item.price * item.quantity)}</div>
                     </div>
                   </article>
-                ))
+                  );
+                })
               ) : (
                 <div className={styles.emptyCartState}>
                   <p className={styles.emptyCartTitle}>Корзина пуста</p>
