@@ -9,6 +9,7 @@
   var BRIDGE_ATTR = 'data-custom-checkout-bound';
   var BUTTON_CLASS = 't-custom-checkout-button';
   var STYLE_ELEMENT_ID = 't-custom-checkout-button-styles';
+  var HAS_POINTER_EVENT = typeof window !== 'undefined' && 'PointerEvent' in window;
   var CART_ROOT_SELECTOR =
     '.t706__cartwin, .t706__cartpage, .t706__sidebar, .t706, .t-store__cart, .t228__cart, .js-store-cart';
   var CART_ACTION_SELECTOR =
@@ -17,6 +18,7 @@
     /cartwin-proceed|cartpage-open-form|sidebar-continue|orderform-btn|js-store-order|js-cart-order|js-tcart-checkout|tcart__order|cart__order|checkout-btn|checkout-button/i;
   var CART_IGNORE_CLASS_RE =
     /plus|minus|qty|quantity|amount|count|remove|delete|close|clear|cancel|inc|dec|control/i;
+  var isRedirecting = false;
 
   function injectButtonStyles() {
     if (document.getElementById(STYLE_ELEMENT_ID)) {
@@ -655,6 +657,10 @@
   }
 
   function openCustomCheckout(event) {
+    if (isRedirecting) {
+      return;
+    }
+
     var targetUrl = buildCheckoutUrl();
 
     if (!targetUrl) {
@@ -668,6 +674,7 @@
       event.stopImmediatePropagation();
     }
 
+    isRedirecting = true;
     window.location.href = targetUrl;
   }
 
@@ -772,6 +779,20 @@
     openCustomCheckout(event);
   }
 
+  function handleDocumentPointerDown(event) {
+    if (event && typeof event.button === 'number' && event.button !== 0) {
+      return;
+    }
+
+    var actionNode = findCartActionNode(event.target);
+
+    if (!isCartButton(actionNode)) {
+      return;
+    }
+
+    openCustomCheckout(event);
+  }
+
   function handleDocumentSubmit(event) {
     var form = event.target;
 
@@ -802,6 +823,7 @@
   }
 
   bindCartButtons();
+  document.addEventListener(HAS_POINTER_EVENT ? 'pointerdown' : 'mousedown', handleDocumentPointerDown, true);
   document.addEventListener('click', handleDocumentClick, true);
   document.addEventListener('submit', handleDocumentSubmit, true);
 
