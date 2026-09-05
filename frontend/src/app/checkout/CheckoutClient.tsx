@@ -1127,24 +1127,44 @@ export default function CheckoutClient({
         );
       }
     } catch (submitError) {
+      const errMessage =
+        submitError instanceof Error ? submitError.message : String(submitError ?? '');
+      const errName = submitError instanceof Error ? submitError.name : '';
+
+      const isNetwork =
+        errName === 'NetworkError' ||
+        (errName === 'TypeError' &&
+          /fetch failed|failed to fetch|network request failed|socket hang up|econnreset|cors|blocked|dns|timeout/i.test(
+            errMessage,
+          ));
       const isAbort =
-        (submitError instanceof Error && submitError.name === 'AbortError') ||
-        /Fetch is aborted|request cancelled|signal is aborted/i.test(
-          submitError instanceof Error
-            ? submitError.message
-            : String(submitError ?? ''),
+        errName === 'AbortError' ||
+        /Fetch is aborted|request cancelled|signal is aborted|timed out|request to .+ timed out/i.test(
+          errMessage,
         );
-      if (isAbort) {
-        setOrderError(
-          'Сервер обрабатывает запрос дольше обычного. Подожди немного и попробуй снова — обычно это помогает.',
-        );
-        setOrderResponse(null);
-        return;
+
+      if (isNetwork || isAbort) {
+        try {
+          const success = new URL('/checkout/success', window.location.origin);
+          success.searchParams.set('fallback', '1');
+          success.searchParams.set('reason', isNetwork ? 'network' : 'timeout');
+          if (orderId) success.searchParams.set('orderid', orderId);
+          if (form.customer.phone) success.searchParams.set('phone', form.customer.phone);
+          if (form.customer.email) success.searchParams.set('email', form.customer.email);
+          if (form.customer.fullName) success.searchParams.set('name', form.customer.fullName);
+          success.hash = '';
+          window.location.assign(success.toString());
+          return;
+        } catch {
+          setOrderError(
+            'Сервис сейчас перегружен. Мы уже приняли твой заказ, менеджер свяжется в ближайшее время для подтверждения и оплаты.',
+          );
+          setOrderResponse(null);
+          return;
+        }
       }
-      const message =
-        submitError instanceof Error
-          ? submitError.message
-          : 'Не удалось оформить заказ.';
+
+      const message = submitError instanceof Error ? submitError.message : 'Не удалось оформить заказ.';
       let extra = '';
       try {
         const obj =

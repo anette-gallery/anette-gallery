@@ -199,29 +199,15 @@ function computeStubInvoice(payload: CreatePaymentPayload & { paymentMethod?: Pa
   } as CreatePaymentResponse & { stub: boolean; configured: boolean };
 }
 
-export async function createPaykeeperInvoice(
+async function createPaykeeperInvoiceLive(
   payload: CreatePaymentPayload & { paymentMethod?: PaymentMethod },
 ): Promise<CreatePaymentResponse> {
-  const stubMode = isStubMode();
-
   const amount = Number(payload.amount);
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new ApiCallError(400, 'Invalid payment amount');
   }
 
-  const paykeeper = stubMode && isPaykeeperConfigured() ? ensurePaykeeperCredentials() : isPaykeeperConfigured() ? ensurePaykeeperCredentials() : null;
-
-  if (stubMode && !paykeeper) {
-    return computeStubInvoice(payload);
-  }
-
-  if (!paykeeper) {
-    throw new ApiCallError(
-      503,
-      'Не настроены реквизиты платежной системы в Vercel и интеграции не в stub режиме',
-      'paykeeper_not_configured',
-    );
-  }
+  const paykeeper = ensurePaykeeperCredentials();
 
   const token = await getPaykeeperToken();
 
@@ -334,6 +320,36 @@ export async function createPaykeeperInvoice(
     paymentUrl,
     expiresAt: rawExpiry !== null && rawExpiry !== undefined ? String(rawExpiry) : undefined,
   };
+}
+
+export async function createPaykeeperInvoice(
+  payload: CreatePaymentPayload & { paymentMethod?: PaymentMethod },
+): Promise<CreatePaymentResponse> {
+  const stubMode = isStubMode();
+  const configured = isPaykeeperConfigured();
+
+  if (stubMode || !configured) {
+    return computeStubInvoice(payload);
+  }
+
+  try {
+    return await Promise.race<CreatePaymentResponse>([
+      createPaykeeperInvoiceLive(payload),
+      new Promise<CreatePaymentResponse>((_, reject) => {
+        const t = setTimeout(() => {
+          clearTimeout(t);
+          reject(new ApiCallError(504, 'Paykeeper request timed out', 'paykeeper_timeout'));
+        }, 15000);
+      }),
+    ]);
+  } catch {
+    const fallback = computeStubInvoice(payload);
+    return {
+      ...fallback,
+      degraded: true,
+      degradedReason: 'paykeeper-live-failed',
+    } as CreatePaymentResponse & { degraded: boolean; degradedReason: string };
+  }
 }
 
 export { isPaykeeperConfigured };
