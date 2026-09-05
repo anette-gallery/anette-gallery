@@ -1,14 +1,13 @@
-import { readFileSync } from 'node:fs';
 import { getAppConfig, hasRealValue } from '@/server/config';
 import { checkDatabaseConnection, isDatabaseConfigured } from '@/server/database';
 import {
   applyLoyalty as applyLoyaltyInMaxma,
   calculateCheckout as calculateCheckoutInMaxma,
-  createOrder as createOrderInMaxma,
   syncCustomer as syncCustomerInMaxma,
   validateGiftCard as validateGiftCardInMaxma,
   validatePromoCode as validatePromoCodeInMaxma,
 } from '@/server/integrations/maxma';
+import { createOrderAsLead, getAmoCrmStatus } from '@/server/integrations/amocrm';
 import {
   normalizeCatalogBatch,
   normalizeCatalogItem,
@@ -17,6 +16,7 @@ import {
   upsertProduct,
   upsertProductsBatch,
 } from '@/server/integrations/tilda';
+import { isPaykeeperConfigured } from '@/server/integrations/paykeeper';
 import type {
   CalculateCheckoutPayload,
   CreateOrderPayload,
@@ -64,6 +64,10 @@ export async function getHealth() {
           hasRealValue(config.integrations.tilda.baseUrl) &&
           hasRealValue(config.integrations.tilda.apiKey),
       },
+      paykeeper: {
+        configured: isPaykeeperConfigured(),
+      },
+      amocrm: getAmoCrmStatus(),
     },
   };
 }
@@ -101,9 +105,19 @@ export async function createOrder(
     reason: 'maxma-unreachable',
     mode: 'fallback',
   };
-  let order: { status?: string; id?: string | null; [key: string]: unknown } = {
+  let maxmaDiscountInfo: {
+    subtotal: number;
+    totalDiscount: number;
+    prepaidAmount: number;
+    finalTotal: number;
+    promoCode?: string;
+    giftCardNumber?: string;
+    loyaltyApplied?: boolean;
+    discountBreakdown?: unknown;
+  } | null = null;
+  let amoLead: { status?: string; leadId?: number; [key: string]: unknown } = {
     status: 'skipped',
-    reason: 'maxma-unreachable',
+    reason: 'amocrm-unreachable',
     mode: 'fallback',
   };
 
@@ -127,52 +141,135 @@ export async function createOrder(
     };
   }
 
-  if (customerSync.status !== 'error' && customerSync.reason !== 'customer-sync-fetch-failed') {
-    try {
-      order = await createOrderInMaxma(payload, options) as { status?: string; id?: string | null; [key: string]: unknown };
-    } catch (err) {
-      order = {
-        status: 'degraded',
-        reason: 'create-order-fetch-failed',
-        mode: 'fallback',
-        rawError:
-          err instanceof Error
-            ? { name: err.name, message: err.message }
-            : String(err ?? '').slice(0, 400),
-      };
-    }
-  } else if (customerSync.status === 'error') {
-    order = {
-      status: 'error',
-      action: 'create-order',
-      orderSkipped: true,
-      reason: 'customer_sync_failed',
-      orderPayload: payload,
-      customerSync,
+  try {
+    const checkoutCalcPayload: CalculateCheckoutPayload = {
+      phone: payload.customer.phone,
+      promoCode: payload.promoCode,
+      giftCardNumber: payload.giftCardNumber,
+      registerInLoyaltyProgram: payload.registerInLoyaltyProgram,
+      items: payload.items.map((item) => ({
+        sku: item.sku,
+        title: item.title,
+        image: item.image,
+        category: item.category,
+        categoryExternalId: item.categoryExternalId,
+        externalId: item.externalId,
+        vatPercent: item.vatPercent,
+        quantity: item.quantity,
+        price: item.price ?? 0,
+      })),
     };
-    return order;
+
+    const calcResult = await calculateCheckoutInMaxma(checkoutCalcPayload);
+    const subtotal =
+      typeof (calcResult as Record<string, unknown>).subtotal === 'number'
+        ? ((calcResult as Record<string, unknown>).subtotal as number)
+        : payload.items.reduce((s, i) => s + (i.price ?? 0) * i.quantity, 0);
+    const total =
+      typeof (calcResult as Record<string, unknown>).total === 'number'
+        ? ((calcResult as Record<string, unknown>).total as number)
+        : payload.totalAmount;
+
+    const discountArr =
+      Array.isArray((calcResult as Record<string, unknown>).discounts) &&
+      ((calcResult as Record<string, unknown>).discounts as unknown[]).length > 0
+        ? (((calcResult as Record<string, unknown>).discounts as unknown[])[0] as Record<string, unknown>)
+        : null;
+
+    const totalDiscount =
+      discountArr && typeof discountArr.totalDiscount === 'number'
+        ? (discountArr.totalDiscount as number)
+        : Math.max(0, subtotal - total);
+    const prepaidAmount =
+      discountArr && typeof discountArr.prepaidAmount === 'number'
+        ? (discountArr.prepaidAmount as number)
+        : 0;
+
+    const loyaltyData =
+      typeof (calcResult as Record<string, unknown>).loyalty === 'object' &&
+      (calcResult as Record<string, unknown>).loyalty !== null
+        ? ((calcResult as Record<string, unknown>).loyalty as Record<string, unknown>)
+        : null;
+    const promocodeData =
+      typeof (calcResult as Record<string, unknown>).promocode === 'object' &&
+      (calcResult as Record<string, unknown>).promocode !== null
+        ? ((calcResult as Record<string, unknown>).promocode as Record<string, unknown>)
+        : null;
+    const giftCardsArr = Array.isArray((calcResult as Record<string, unknown>).giftCards)
+      ? (((calcResult as Record<string, unknown>).giftCards as unknown[]).length > 0
+          ? ((calcResult as Record<string, unknown>).giftCards as unknown[])
+          : null)
+      : null;
+
+    maxmaDiscountInfo = {
+      subtotal,
+      totalDiscount,
+      prepaidAmount,
+      finalTotal: total,
+      promoCode: promocodeData
+        ? typeof (promocodeData as Record<string, unknown>).code === 'string'
+          ? ((promocodeData as Record<string, unknown>).code as string)
+          : undefined
+        : payload.promoCode,
+      giftCardNumber: giftCardsArr
+        ? typeof giftCardsArr[0] === 'object' && giftCardsArr[0] !== null && 'code' in (giftCardsArr[0] as Record<string, unknown>)
+          ? ((giftCardsArr[0] as Record<string, unknown>).code as string)
+          : undefined
+        : payload.giftCardNumber,
+      loyaltyApplied: loyaltyData
+        ? Boolean((loyaltyData as Record<string, unknown>).bonuses)
+        : undefined,
+      discountBreakdown: discountArr ?? undefined,
+    };
+  } catch (err) {
+    maxmaDiscountInfo = null;
   }
 
-  const orderStatus =
-    order && typeof order === 'object' && typeof order.status === 'string'
-      ? order.status
+  try {
+    amoLead = await createOrderAsLead(payload, {
+      txid: options?.txid,
+      maxmaDiscountInfo: maxmaDiscountInfo ?? undefined,
+    }) as { status?: string; leadId?: number; [key: string]: unknown };
+  } catch (err) {
+    amoLead = {
+      status: 'degraded',
+      reason: 'amocrm-lead-fetch-failed',
+      mode: 'fallback',
+      rawError:
+        err instanceof Error
+          ? { name: err.name, message: err.message }
+          : String(err ?? '').slice(0, 400),
+    };
+  }
+
+  const amoStatus =
+    amoLead && typeof amoLead === 'object' && typeof amoLead.status === 'string'
+      ? amoLead.status
       : 'degraded';
 
-  if (orderStatus === 'ok' || orderStatus === 'degraded') {
+  if (amoStatus === 'ok' || amoStatus === 'stub' || amoStatus === 'degraded') {
     return {
       status: 'ok',
       id:
-        (order && typeof order.id === 'string' && order.id) ||
-        null,
-      degradedMode: orderStatus === 'degraded' ? (order.reason ?? 'maxma-unreachable') : undefined,
+        (amoLead && typeof amoLead.leadId === 'number'
+          ? String(amoLead.leadId)
+          : (amoLead && typeof (amoLead as Record<string, unknown>).id === 'string'
+              ? ((amoLead as Record<string, unknown>).id as string)
+              : null)) || null,
+      degradedMode:
+        amoStatus === 'degraded'
+          ? ((amoLead as Record<string, unknown>).reason as string | undefined) ?? 'amocrm-unreachable'
+          : undefined,
       customerSync,
-      order,
+      maxmaDiscounts: maxmaDiscountInfo,
+      amocrm: amoLead,
     };
   }
 
   return {
-    ...(order as Record<string, unknown>),
+    ...(amoLead as Record<string, unknown>),
     customerSync,
+    maxmaDiscounts: maxmaDiscountInfo,
   };
 }
 

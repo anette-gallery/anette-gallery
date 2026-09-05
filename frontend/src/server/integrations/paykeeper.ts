@@ -9,11 +9,14 @@ import {
   ApiCallError,
   assertOkStatus,
   buildAbsoluteUrl,
-  buildSearchParams,
   encodeQuery,
   parseJsonOrThrow,
 } from '@/server/http';
-import { getConfig } from '@/server/config';
+import { getAppConfig, getConfig, hasRealValue } from '@/server/config';
+
+function isStubMode(): boolean {
+  return getAppConfig().integrations.mode !== 'live';
+}
 
 type PaykeeperTokenResponse = {
   token: string;
@@ -43,6 +46,16 @@ type PaykeeperCredentials = {
   failUrl: string | null;
   notifyPath: string | null;
 };
+
+function isPaykeeperConfigured(): boolean {
+  const { paykeeper } = getConfig();
+  return (
+    hasRealValue(paykeeper.baseUrl) &&
+    hasRealValue(paykeeper.username) &&
+    hasRealValue(paykeeper.password) &&
+    hasRealValue(paykeeper.secret)
+  );
+}
 
 function ensurePaykeeperCredentials(): PaykeeperCredentials {
   const { paykeeper } = getConfig();
@@ -108,16 +121,109 @@ async function getPaykeeperToken(): Promise<string> {
   return data.token;
 }
 
+function extractInvoiceIdFromHtml(html: string): string | null {
+  if (!html) return null;
+  const patterns = [
+    /name\s*=\s*["']invoice_id["']\s+value\s*=\s*["']([^"']+)["']/i,
+    /invoice_id\s*[:=]\s*["']([^"']+)["']/i,
+    /invoiceid\s*[:=]\s*["']([^"']+)["']/i,
+    /data-invoice-id\s*=\s*["']([^"']+)["']/i,
+    /\/bill\/([A-Za-z0-9_-]+)/i,
+    /name\s*=\s*["']invoiceid["']\s+value\s*=\s*["']([^"']+)["']/i,
+    /input[^>]*\bid\s*=\s*["']invoice_id["'][^>]*\bvalue\s*=\s*["']([^"']+)["']/i,
+  ];
+  for (const re of patterns) {
+    const m = html.match(re);
+    if (m?.[1]) return m[1].trim();
+  }
+  return null;
+}
+
+function extractInvoiceIdFromAny(obj: unknown): string | null {
+  if (obj === null || obj === undefined) return null;
+  if (typeof obj === 'string') {
+    const trimmed = obj.trim();
+    if (!trimmed) return null;
+    try {
+      const parsed = JSON.parse(trimmed);
+      return extractInvoiceIdFromAny(parsed) ?? extractInvoiceIdFromHtml(trimmed);
+    } catch {
+      return extractInvoiceIdFromHtml(trimmed);
+    }
+  }
+  if (typeof obj !== 'object') return null;
+
+  const dict = obj as Record<string, unknown>;
+
+  const directKeys = ['invoice_id', 'invoiceid', 'id', 'invoiceId', 'invoice', 'bill_id'];
+  for (const k of directKeys) {
+    const v = dict[k];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+    if (typeof v === 'number') return String(v);
+  }
+
+  const nestedKeys = ['result', 'data', 'response', 'preview', 'invoice', 'payload', 'body'];
+  for (const k of nestedKeys) {
+    const v = dict[k];
+    if (v && typeof v === 'object') {
+      const found = extractInvoiceIdFromAny(v);
+      if (found) return found;
+    }
+  }
+
+  for (const v of Object.values(dict)) {
+    if (typeof v === 'string') {
+      const fromHtml = extractInvoiceIdFromHtml(v);
+      if (fromHtml) return fromHtml;
+    }
+  }
+
+  return null;
+}
+
+function computeStubInvoice(payload: CreatePaymentPayload & { paymentMethod?: PaymentMethod }): CreatePaymentResponse {
+  const cfg = getConfig();
+  const invoiceId = `stub-${payload.orderId}-${Date.now().toString(36)}`;
+  const fallback = cfg.frontendPublicUrl || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  const fake = new URL('/checkout/success', fallback);
+  fake.searchParams.set('invoice_id', invoiceId);
+  fake.searchParams.set('orderid', String(payload.orderId));
+  fake.searchParams.set('stub', '1');
+  return {
+    status: 'ok',
+    invoiceId,
+    paymentUrl: fake.toString(),
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    stub: true,
+    configured: isPaykeeperConfigured(),
+  } as CreatePaymentResponse & { stub: boolean; configured: boolean };
+}
+
 export async function createPaykeeperInvoice(
   payload: CreatePaymentPayload & { paymentMethod?: PaymentMethod },
 ): Promise<CreatePaymentResponse> {
-  const paykeeper = ensurePaykeeperCredentials();
-  const token = await getPaykeeperToken();
+  const stubMode = isStubMode();
 
   const amount = Number(payload.amount);
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new ApiCallError(400, 'Invalid payment amount');
   }
+
+  const paykeeper = stubMode && isPaykeeperConfigured() ? ensurePaykeeperCredentials() : isPaykeeperConfigured() ? ensurePaykeeperCredentials() : null;
+
+  if (stubMode && !paykeeper) {
+    return computeStubInvoice(payload);
+  }
+
+  if (!paykeeper) {
+    throw new ApiCallError(
+      503,
+      'Не настроены реквизиты платежной системы в Vercel и интеграции не в stub режиме',
+      'paykeeper_not_configured',
+    );
+  }
+
+  const token = await getPaykeeperToken();
 
   const clientId =
     (payload.clientId || '').trim() ||
@@ -165,63 +271,63 @@ export async function createPaykeeperInvoice(
     headers: {
       Authorization: basicAuthHeader(paykeeper.username, paykeeper.password),
       'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
-      Accept: 'application/json',
+      Accept: 'application/json, text/plain, */*',
     },
     body,
   });
 
-  let rawData: unknown = null;
   const text = await rawResp.text().catch(() => '');
+
+  let rawData: unknown = { rawText: text.substring(0, 600) };
   try {
     rawData = text ? JSON.parse(text) : null;
   } catch {
-    rawData = { rawText: text.substring(0, 400) };
+    const fromHtml = extractInvoiceIdFromHtml(text);
+    if (fromHtml) {
+      rawData = { invoice_id: fromHtml, rawText: text.substring(0, 400) };
+    }
   }
 
   if (!rawResp.ok) {
-    const msg =
-      rawData && typeof rawData === 'object' && 'msg' in rawData && typeof (rawData as { msg: unknown }).msg === 'string'
-        ? (rawData as { msg: string }).msg
-        : `HTTP ${rawResp.status}`;
+    let msg = `HTTP ${rawResp.status}`;
+    if (rawData && typeof rawData === 'object') {
+      const d = rawData as Record<string, unknown>;
+      if (typeof d.msg === 'string') msg = d.msg;
+      else if (typeof d.message === 'string') msg = d.message;
+      else if (typeof d.error === 'string') msg = d.error;
+    }
     throw new ApiCallError(
       rawResp.status,
       `Paykeeper create-invoice failed: ${msg}`,
       'paykeeper_invoice_create',
+      { rawText: text.substring(0, 800) },
     );
   }
 
-  const data = rawData as {
-    invoice_id?: string;
-    invoiceid?: string;
-    id?: string;
-    result?: { invoice_id?: string; id?: string };
-    error?: string;
-    msg?: string;
-    message?: string;
-    [key: string]: unknown;
-  } | null;
-
-  const invoiceId =
-    data && typeof data === 'object'
-      ? (String(data.invoice_id ?? data.invoiceid ?? data.id ?? data.result?.invoice_id ?? data.result?.id ?? '').trim() || null)
-      : null;
+  const invoiceId = extractInvoiceIdFromAny(rawData) ?? extractInvoiceIdFromHtml(text);
 
   if (!invoiceId) {
     const details =
-      data && typeof data === 'object'
-        ? JSON.stringify(data).slice(0, 400)
-        : String(rawData ?? '').slice(0, 400);
+      rawData && typeof rawData === 'object'
+        ? JSON.stringify(rawData).slice(0, 600)
+        : String(rawData ?? '').slice(0, 600);
     throw new ApiCallError(
       502,
       `Paykeeper did not return invoice id. Response: ${details}`,
       'paykeeper_invoice_missing_id',
+      {
+        rawText: text.substring(0, 1200),
+        httpStatus: rawResp.status,
+      },
     );
   }
 
   const paymentUrl = buildAbsoluteUrl(paykeeper.baseUrl, `/bill/${encodeURIComponent(invoiceId)}/`)
     .toString();
+  const dict =
+    rawData && typeof rawData === 'object' ? (rawData as Record<string, unknown>) : {};
   const rawExpiry =
-    data && typeof data === 'object' && 'expiry' in data ? (data as { expiry: unknown }).expiry : undefined;
+    typeof dict.expiry === 'string' || typeof dict.expiry === 'number' ? String(dict.expiry) : undefined;
   return {
     status: 'ok',
     invoiceId: String(invoiceId),
@@ -229,6 +335,8 @@ export async function createPaykeeperInvoice(
     expiresAt: rawExpiry !== null && rawExpiry !== undefined ? String(rawExpiry) : undefined,
   };
 }
+
+export { isPaykeeperConfigured };
 
 function paykeeperSign(fields: Record<string, unknown>, secret: string): string {
   const ordered = Object.keys(fields)

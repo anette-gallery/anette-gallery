@@ -126,6 +126,43 @@ function getItems(order: OrderRequestListItem): OrderItem[] {
   );
 }
 
+function getAddress(order: OrderRequestListItem): string | undefined {
+  const rawPayload = order.rawPayload;
+
+  if (!rawPayload || typeof rawPayload !== 'object' || !('customer' in rawPayload)) {
+    return undefined;
+  }
+
+  const customer = rawPayload.customer;
+
+  if (!customer || typeof customer !== 'object' || !('address' in customer)) {
+    return undefined;
+  }
+
+  return typeof customer.address === 'string' && customer.address.trim()
+    ? customer.address.trim()
+    : undefined;
+}
+
+function getShortOrderNumber(order: OrderRequestListItem): string {
+  return order.id.slice(0, 8).toUpperCase();
+}
+
+function serializeOrder(order: OrderRequestListItem) {
+  const items = getItems(order);
+  const address = getAddress(order);
+
+  return {
+    ...order,
+    orderNumber: getShortOrderNumber(order),
+    address,
+    items,
+    previewImage:
+      items.find((item) => typeof item.image === 'string' && item.image.trim())?.image ??
+      undefined,
+  };
+}
+
 function getMaxmaStatus(order: OrderRequestListItem): string {
   const responsePayload = order.responsePayload;
 
@@ -224,7 +261,7 @@ function renderOrdersTable(orders: OrderRequestListItem[], limit: number): strin
               <tr>
                 <td class="date-cell">
                   <div>${escapeHtml(formatDate(order.createdAt))}</div>
-                  <div class="muted">ID: ${escapeHtml(order.id.slice(0, 8))}</div>
+                  <div class="muted">Заказ № ${escapeHtml(getShortOrderNumber(order))}</div>
                 </td>
                 <td>${renderStatus(getMaxmaStatus(order))}</td>
                 <td>${renderPaymentStatus(order)}</td>
@@ -551,19 +588,10 @@ export async function GET(request: Request) {
       matchedBy,
     },
     count: orders.length,
-    orders,
+    orders: orders.map(serializeOrder),
   };
 
-  if (wantsJson(request)) {
-    return jsonResponse(data);
-  }
-
-  return new Response(renderOrdersTable(orders, limit), {
-    status: 200,
-    headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-    },
-  });
+  return jsonResponse(data);
 }
 
 export async function OPTIONS() {

@@ -53,6 +53,27 @@ export type AppConfig = {
       failUrl: string | null;
       notifyPath: string | null;
     };
+    amocrm: {
+      baseUrl: string | null;
+      accessToken: string | null;
+      pipelineId: number | null;
+      unsortedStatusId: number | null;
+      responsibleUserId: number | null;
+      orderTxidFieldId: number | null;
+      promoCodeFieldId: number | null;
+      giftCardFieldId: number | null;
+      deliveryMethodFieldId: number | null;
+      inboxEmail: string | null;
+    };
+    smtp: {
+      host: string | null;
+      port: number | null;
+      secure: boolean | null;
+      user: string | null;
+      password: string | null;
+      fromName: string | null;
+      fromEmail: string | null;
+    };
   };
 };
 
@@ -169,6 +190,71 @@ export function getAppConfig(): AppConfig {
         notifyPath:
           toOptionalString(process.env.PAYKEEPER_NOTIFY_PATH) ??
           '/api/v1/payments/paykeeper/notify',
+      },
+      amocrm: {
+        baseUrl: toOptionalString(process.env.AMOCRM_BASE_URL),
+        accessToken: toOptionalString(process.env.AMOCRM_ACCESS_TOKEN),
+        pipelineId: (() => {
+          const v = process.env.AMOCRM_PIPELINE_ID;
+          if (!v) return null;
+          const n = Number(v);
+          return Number.isFinite(n) && n > 0 ? n : null;
+        })(),
+        unsortedStatusId: (() => {
+          const v = process.env.AMOCRM_UNSORTED_STATUS_ID;
+          if (!v) return null;
+          const n = Number(v);
+          return Number.isFinite(n) && n > 0 ? n : null;
+        })(),
+        responsibleUserId: (() => {
+          const v = process.env.AMOCRM_RESPONSIBLE_USER_ID;
+          if (!v) return null;
+          const n = Number(v);
+          return Number.isFinite(n) && n > 0 ? n : null;
+        })(),
+        orderTxidFieldId: (() => {
+          const v = process.env.AMOCRM_ORDER_TXID_FIELD_ID;
+          if (!v) return null;
+          const n = Number(v);
+          return Number.isFinite(n) && n > 0 ? n : null;
+        })(),
+        promoCodeFieldId: (() => {
+          const v = process.env.AMOCRM_PROMO_FIELD_ID;
+          if (!v) return null;
+          const n = Number(v);
+          return Number.isFinite(n) && n > 0 ? n : null;
+        })(),
+        giftCardFieldId: (() => {
+          const v = process.env.AMOCRM_GIFT_CARD_FIELD_ID;
+          if (!v) return null;
+          const n = Number(v);
+          return Number.isFinite(n) && n > 0 ? n : null;
+        })(),
+        deliveryMethodFieldId: (() => {
+          const v = process.env.AMOCRM_DELIVERY_FIELD_ID;
+          if (!v) return null;
+          const n = Number(v);
+          return Number.isFinite(n) && n > 0 ? n : null;
+        })(),
+        inboxEmail: toOptionalString(process.env.AMOCRM_INBOX_EMAIL),
+      },
+      smtp: {
+        host: toOptionalString(process.env.SMTP_HOST),
+        port: (() => {
+          const v = process.env.SMTP_PORT;
+          if (!v) return null;
+          const n = Number(v);
+          return Number.isFinite(n) && n > 0 ? n : null;
+        })(),
+        secure: (() => {
+          const v = process.env.SMTP_SECURE;
+          if (v === undefined || v === '') return null;
+          return v === 'true' || v === '1';
+        })(),
+        user: toOptionalString(process.env.SMTP_USER),
+        password: toOptionalString(process.env.SMTP_PASSWORD),
+        fromName: toOptionalString(process.env.SMTP_FROM_NAME),
+        fromEmail: toOptionalString(process.env.SMTP_FROM_EMAIL),
       },
     },
   };
