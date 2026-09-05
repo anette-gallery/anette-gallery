@@ -91,6 +91,13 @@ function toOptionalString(value?: string): string | null {
   return trimmed;
 }
 
+function toOptionalUrl(value?: string): string | null {
+  const s = toOptionalString(value);
+  if (!s) return null;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return s;
+  return `https://${s}`;
+}
+
 function toNumber(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -105,7 +112,7 @@ export function hasRealValue(value: string | null | undefined): boolean {
 }
 
 export function getAppConfig(): AppConfig {
-  const frontendPublicUrl = toOptionalString(process.env.FRONTEND_PUBLIC_URL);
+  const frontendPublicUrl = toOptionalUrl(process.env.FRONTEND_PUBLIC_URL);
 
   return {
     server: {
@@ -121,7 +128,7 @@ export function getAppConfig(): AppConfig {
     integrations: {
       mode: process.env.INTEGRATIONS_MODE === 'live' ? 'live' : 'stub',
       maxma: {
-        baseUrl: toOptionalString(process.env.MAXMA_API_URL),
+        baseUrl: toOptionalUrl(process.env.MAXMA_API_URL),
         apiKey: toOptionalString(process.env.MAXMA_API_KEY),
         shopCode: toOptionalString(process.env.MAXMA_SHOP_CODE),
         shopName: toOptionalString(process.env.MAXMA_SHOP_NAME),
@@ -152,7 +159,7 @@ export function getAppConfig(): AppConfig {
           '/confirm-ticket',
       },
       onec: {
-        baseUrl: toOptionalString(process.env.ONEC_API_URL),
+        baseUrl: toOptionalUrl(process.env.ONEC_API_URL),
         login: toOptionalString(process.env.ONEC_API_LOGIN),
         password: toOptionalString(process.env.ONEC_API_PASSWORD),
         catalogSyncPath:
@@ -163,7 +170,7 @@ export function getAppConfig(): AppConfig {
           '/catalog/sync/batch',
       },
       tilda: {
-        baseUrl: toOptionalString(process.env.TILDA_API_URL),
+        baseUrl: toOptionalUrl(process.env.TILDA_API_URL),
         apiKey: toOptionalString(process.env.TILDA_API_KEY),
         webhookSecret: toOptionalString(process.env.TILDA_WEBHOOK_SECRET),
         productUpsertPath:
@@ -174,7 +181,7 @@ export function getAppConfig(): AppConfig {
           '/products/batch-upsert',
       },
       paykeeper: {
-        baseUrl: toOptionalString(process.env.PAYKEEPER_BASE_URL),
+        baseUrl: toOptionalUrl(process.env.PAYKEEPER_BASE_URL),
         username: toOptionalString(process.env.PAYKEEPER_USERNAME),
         password: toOptionalString(process.env.PAYKEEPER_PASSWORD),
         secret: toOptionalString(process.env.PAYKEEPER_SECRET),
@@ -182,17 +189,17 @@ export function getAppConfig(): AppConfig {
           process.env.PAYKEEPER_SERVER_CALLBACK_SECRET,
         ),
         successUrl:
-          toOptionalString(process.env.PAYKEEPER_SUCCESS_URL) ??
+          toOptionalUrl(process.env.PAYKEEPER_SUCCESS_URL) ??
           (frontendPublicUrl ? `${frontendPublicUrl}/checkout/success` : null),
         failUrl:
-          toOptionalString(process.env.PAYKEEPER_FAIL_URL) ??
+          toOptionalUrl(process.env.PAYKEEPER_FAIL_URL) ??
           (frontendPublicUrl ? `${frontendPublicUrl}/checkout/fail` : null),
         notifyPath:
           toOptionalString(process.env.PAYKEEPER_NOTIFY_PATH) ??
           '/api/v1/payments/paykeeper/notify',
       },
       amocrm: {
-        baseUrl: toOptionalString(process.env.AMOCRM_BASE_URL),
+        baseUrl: toOptionalUrl(process.env.AMOCRM_BASE_URL),
         accessToken: toOptionalString(process.env.AMOCRM_ACCESS_TOKEN),
         pipelineId: (() => {
           const v = process.env.AMOCRM_PIPELINE_ID;

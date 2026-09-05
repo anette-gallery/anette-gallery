@@ -88,11 +88,28 @@ export function buildSearchParams(
   return params;
 }
 
+export function normalizeUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim().replace(/\/+$/, '');
+  if (!trimmed) return null;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
 export function buildAbsoluteUrl(base: string, pathname: string, query?: Record<string, unknown>): URL {
-  const baseObj = new URL(pathname, base.endsWith('/') ? base : `${base}/`);
-  const params = buildSearchParams(query);
-  params.forEach((value, key) => baseObj.searchParams.append(key, value));
-  return baseObj;
+  const cleanBase = normalizeUrl(base) ?? base;
+  try {
+    const baseObj = new URL(pathname, cleanBase.endsWith('/') ? cleanBase : `${cleanBase}/`);
+    const params = buildSearchParams(query);
+    params.forEach((value, key) => baseObj.searchParams.append(key, value));
+    return baseObj;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new ApiCallError(500, `Invalid URL when constructing request. Base="${base}", path="${pathname}": ${msg}`, 'ERR_INVALID_URL', {
+      debug: { base, cleanBase, pathname, query: query ? JSON.stringify(query).slice(0, 300) : null },
+      hint: 'If you copied URL without https:// prefix — add "https://" at the start of environment variable value.',
+    });
+  }
 }
 
 export class ApiCallError extends Error {
