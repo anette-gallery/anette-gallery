@@ -14,6 +14,7 @@
     '.last-order-banner',
     '[data-last-order-banner]',
     '#last-order-banner',
+    '#cabinet-orders-widget',
   ];
   var LAST_ORDER_BANNER_TEXT_HINTS = [
     /Заказ\s+[0-9a-f]{6,}/i,
