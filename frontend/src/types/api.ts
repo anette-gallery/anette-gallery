@@ -295,6 +295,63 @@ export type SyncCatalogBatchPayload = {
   resumeFromSku?: string;
 };
 
+export type BrandMapSource =
+  | { mode: 'stub' }
+  | {
+      mode: 'payload';
+      payload: Array<{ sku: string; brand: string }>;
+    };
+
+export type BrandApplyCatalogRow = {
+  sku: string;
+  name: string;
+  brand?: string;
+  existingCategoryIds?: string[];
+  brandCategoryId?: string;
+  displayName?: string;
+};
+
+export type BrandApplyApiResponse = {
+  status: 'ok' | 'partial' | 'error';
+  mode:
+    | 'preview'
+    | 'csv-download'
+    | 'dry-run'
+    | 'error'
+    | 'apply-brands-help';
+  target: 'tilda';
+  action: 'apply-brands' | 'apply-brands-help';
+  error?: string;
+  summary?: {
+    totalItems: number;
+    matchedWithBrand: number;
+    unknownBrand: number;
+    brandAlreadySetAsSpec: number;
+    categoryAlreadyAssigned: number;
+    needsImportCsv: boolean;
+    brandDistribution: Array<{
+      brand: string;
+      storepartuid: string;
+      count: number;
+    }>;
+  };
+  config?: {
+    integrationsMode: string;
+    tildaConfigured: boolean;
+    brandSpecId: string | null;
+  };
+  csvPreviewRows?: string[] | null;
+  rowsSummary?: Array<{
+    sku: string;
+    name: string;
+    brandDetected: string | null;
+    categoryUid: string | null;
+    needsUpdate: boolean;
+  }>;
+  nextStep?: string[];
+  usage?: unknown;
+};
+
 export type TildaLeadPayload = {
   name?: string;
   phone?: string;

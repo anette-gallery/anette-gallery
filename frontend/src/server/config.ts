@@ -42,6 +42,7 @@ export type AppConfig = {
       webhookSecret: string | null;
       productUpsertPath: string | null;
       productBatchUpsertPath: string | null;
+      brandSpecId: string | null;
     };
     paykeeper: {
       baseUrl: string | null;
@@ -74,6 +75,9 @@ export type AppConfig = {
       fromName: string | null;
       fromEmail: string | null;
     };
+  };
+  security: {
+    apiSecret: string | null;
   };
 };
 
@@ -179,6 +183,7 @@ export function getAppConfig(): AppConfig {
         productBatchUpsertPath:
           toOptionalString(process.env.TILDA_PRODUCTS_BATCH_UPSERT_PATH) ??
           '/products/batch-upsert',
+        brandSpecId: toOptionalString(process.env.TILDA_BRAND_SPEC_ID),
       },
       paykeeper: {
         baseUrl: toOptionalUrl(process.env.PAYKEEPER_BASE_URL),
@@ -263,6 +268,9 @@ export function getAppConfig(): AppConfig {
         fromName: toOptionalString(process.env.SMTP_FROM_NAME),
         fromEmail: toOptionalString(process.env.SMTP_FROM_EMAIL),
       },
+    },
+    security: {
+      apiSecret: toOptionalString(process.env.INTEGRATIONS_API_SECRET),
     },
   };
 }

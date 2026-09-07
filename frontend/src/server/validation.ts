@@ -1,4 +1,7 @@
 import type {
+  BrandApplyApiResponse,
+  BrandApplyCatalogRow,
+  BrandMapSource,
   CalculateCheckoutPayload,
   CreateOrderPayload,
   OrderCustomer,
@@ -7,6 +10,8 @@ import type {
   SyncCatalogItemPayload,
   SyncCustomerPayload,
 } from '@/types/api';
+
+import { getAppConfig, hasRealValue } from '@/server/config';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -461,4 +466,83 @@ export function parseSyncCatalogBatchPayload(
   return {
     items: input.items.map(parseSyncCatalogItemPayload),
   };
+}
+
+export function assertApiSecret(req: {
+  headers: { get: (name: string) => string | null };
+}): void {
+  const header = req.headers.get('x-api-secret');
+  const configured = getAppConfig().security?.apiSecret;
+  if (hasRealValue(configured)) {
+    if (!header) throw new Error('Missing x-api-secret header');
+    if (String(header) !== String(configured)) {
+      throw new Error('Invalid x-api-secret header');
+    }
+  }
+}
+
+export function parseBrandApplyMode(req: {
+  nextUrl?: { searchParams: { get: (name: string) => string | null } };
+  url?: string;
+}): 'preview' | 'csv-download' | 'dry-run' {
+  const raw =
+    (req.nextUrl?.searchParams.get('mode') as string | null) ?? 'preview';
+  if (raw === 'csv-download') return 'csv-download';
+  if (raw === 'dry-run') return 'dry-run';
+  return 'preview';
+}
+
+export async function parseBrandApplySourceFromBody(req: {
+  json?: () => Promise<unknown>;
+}): Promise<{
+  catalog: BrandApplyCatalogRow[];
+  brands: BrandMapSource;
+} | null> {
+  try {
+    const data = (await req.json?.()) as Record<string, unknown> | undefined;
+    if (!data || typeof data !== 'object') return null;
+
+    const brands: BrandMapSource =
+      data.brands &&
+      typeof data.brands === 'object' &&
+      (data.brands as { mode?: string }).mode === 'payload' &&
+      Array.isArray((data.brands as { payload?: unknown }).payload)
+        ? ({
+            mode: 'payload',
+            payload: (
+              (data.brands as { payload: unknown[] }).payload as Array<
+                Record<string, unknown>
+              >
+            ).map((row) => ({
+              sku: String(row.sku ?? '').trim(),
+              brand: String(row.brand ?? '').trim(),
+            })),
+          } as BrandMapSource)
+        : { mode: 'stub' };
+
+    const catalog: BrandApplyCatalogRow[] = Array.isArray(data.catalog)
+      ? (data.catalog as Array<Record<string, unknown>>).map((row) => ({
+          sku: String(row.sku ?? '').trim(),
+          name: String(row.name ?? '').trim(),
+          brand: row.brand
+            ? String((row as { brand?: unknown }).brand).trim()
+            : undefined,
+          existingCategoryIds: Array.isArray(row.existingCategoryIds)
+            ? (row.existingCategoryIds as unknown[]).map((v) =>
+                String(v).trim(),
+              )
+            : [],
+          brandCategoryId: row.brandCategoryId
+            ? String((row as { brandCategoryId?: unknown }).brandCategoryId).trim()
+            : undefined,
+          displayName: row.displayName
+            ? String((row as { displayName?: unknown }).displayName).trim()
+            : undefined,
+        }))
+      : [];
+
+    return { catalog, brands };
+  } catch {
+    return null;
+  }
 }

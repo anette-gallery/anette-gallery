@@ -6,6 +6,21 @@
   var BUTTON_TEXT =
     (script && script.dataset && script.dataset.buttonText) ||
     'Оформить заказ';
+  var SHOW_LAST_ORDER_BANNER =
+    script &&
+    script.dataset &&
+    script.dataset.showLastOrderBanner === 'true';
+  var LAST_ORDER_BANNER_SELECTORS = [
+    '.last-order-banner',
+    '[data-last-order-banner]',
+    '#last-order-banner',
+  ];
+  var LAST_ORDER_BANNER_TEXT_HINTS = [
+    /Заказ\s+[0-9a-f]{6,}/i,
+    /Сумма[:\s]+[\d\s]+[₽₽$]/i,
+    /Статус[:\s]+(ok|Оплачен|В работе|Новый|Доставлен|Отменён|error|pending)/i,
+    /Доставка[:\s]+/i,
+  ];
   var BRIDGE_ATTR = 'data-custom-checkout-bound';
   var BUTTON_CLASS = 't-custom-checkout-button';
   var STYLE_ELEMENT_ID = 't-custom-checkout-button-styles';
@@ -13,6 +28,61 @@
     '.t706__cartwin, .t706__cartpage, .t706__sidebar, .t706, .t-store__cart, .t228__cart, .js-store-cart';
   var CART_ACTION_SELECTOR =
     'button, a, input[type="submit"], input[type="button"], [role="button"], .t706__cartwin-proceed, .t706__cartpage-open-form, .t706__sidebar-continue, .t706__orderform-btn, .js-store-order, .js-cart-order, .js-tcart-checkout';
+
+  function isCabinetAllowedPage() {
+    var path = (window.location && window.location.pathname) || '';
+    return /my-orders-checkout|my-order-checkout|my-cabinet|my-addresses/i.test(path);
+  }
+
+  function looksLikeLastOrderBanner(node) {
+    if (!node || node.nodeType !== 1) return false;
+    var text = (node.textContent || '').trim();
+    if (!text) return false;
+    if (text.length > 800) return false;
+    var hints = 0;
+    for (var i = 0; i < LAST_ORDER_BANNER_TEXT_HINTS.length; i += 1) {
+      if (LAST_ORDER_BANNER_TEXT_HINTS[i].test(text)) {
+        hints += 1;
+      }
+    }
+    return hints >= 2;
+  }
+
+  function hideLastOrderBannerIfForbidden() {
+    if (SHOW_LAST_ORDER_BANNER || isCabinetAllowedPage()) {
+      return;
+    }
+    try {
+      for (var i = 0; i < LAST_ORDER_BANNER_SELECTORS.length; i += 1) {
+        var list = document.querySelectorAll(LAST_ORDER_BANNER_SELECTORS[i]);
+        for (var j = 0; j < list.length; j += 1) {
+          var el = list[j];
+          if (el && el.style) {
+            el.style.setProperty('display', 'none', 'important');
+            el.style.setProperty('visibility', 'hidden', 'important');
+            el.style.setProperty('height', '0', 'important');
+            el.style.setProperty('opacity', '0', 'important');
+            el.style.setProperty('overflow', 'hidden', 'important');
+          }
+        }
+      }
+      var candidates = document.querySelectorAll(
+        'body > div:first-of-type, #allrecords > div:first-of-type, header + div, .t-record:first-of-type, .t401__wrapper + div',
+      );
+      for (var k = 0; k < candidates.length; k += 1) {
+        var node = candidates[k];
+        if (looksLikeLastOrderBanner(node) && node.style) {
+          node.style.setProperty('display', 'none', 'important');
+          node.style.setProperty('visibility', 'hidden', 'important');
+          node.style.setProperty('height', '0', 'important');
+          node.style.setProperty('opacity', '0', 'important');
+          node.style.setProperty('overflow', 'hidden', 'important');
+        }
+      }
+    } catch (e) {
+      /* ignore */
+    }
+  }
 
   function injectButtonStyles() {
     if (document.getElementById(STYLE_ELEMENT_ID)) {
@@ -755,11 +825,13 @@
   }
 
   bindCartButtons();
+  hideLastOrderBannerIfForbidden();
   document.addEventListener('click', handleDocumentClick, true);
   document.addEventListener('submit', handleDocumentSubmit, true);
 
   var observer = new MutationObserver(function () {
     bindCartButtons();
+    hideLastOrderBannerIfForbidden();
   });
 
   observer.observe(document.documentElement, {

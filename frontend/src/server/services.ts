@@ -15,7 +15,9 @@ import {
 import {
   upsertProduct,
   upsertProductsBatch,
+  applyBrandToProduct,
 } from '@/server/integrations/tilda';
+import { resolveBrandCategoryId } from '@/server/brand-map';
 import { isPaykeeperConfigured } from '@/server/integrations/paykeeper';
 import type {
   CalculateCheckoutPayload,
@@ -294,10 +296,21 @@ function buildOverrideMeta(payload: SyncCatalogItemPayload) {
   };
 }
 
-export function syncCatalogItem(payload: SyncCatalogItemPayload) {
+export async function syncCatalogItem(payload: SyncCatalogItemPayload) {
   const overrideMeta = buildOverrideMeta(payload);
   const normalized = normalizeCatalogItem(payload);
   const synced = upsertProduct(payload);
+  const config = getAppConfig();
+
+  const brandCategoryId = resolveBrandCategoryId(payload.brand);
+  const brandApplied = await applyBrandToProduct(
+    payload.sku,
+    {
+      brand: payload.brand,
+      brandSpecId: config.integrations.tilda.brandSpecId,
+      brandCategoryId,
+    },
+  );
 
   return {
     status: 'stub',
@@ -307,16 +320,40 @@ export function syncCatalogItem(payload: SyncCatalogItemPayload) {
     overrideMeta,
     normalized,
     synced,
+    brand: {
+      name: payload.brand ?? null,
+      specId: config.integrations.tilda.brandSpecId,
+      categoryId: brandCategoryId,
+      applied: brandApplied,
+    },
   };
 }
 
-export function syncCatalogBatch(payload: SyncCatalogBatchPayload) {
+export async function syncCatalogBatch(payload: SyncCatalogBatchPayload) {
   const overrideSummary = payload.items.map((item) => ({
     sku: item.sku,
     ...buildOverrideMeta(item),
   }));
   const normalized = normalizeCatalogBatch(payload.items);
   const synced = upsertProductsBatch(payload.items);
+  const config = getAppConfig();
+
+  const brandsApplied = await Promise.all(
+    payload.items.map(async (item) => {
+      const brandCategoryId = resolveBrandCategoryId(item.brand);
+      return {
+        sku: item.sku,
+        brand: item.brand ?? null,
+        specId: config.integrations.tilda.brandSpecId,
+        categoryId: brandCategoryId,
+        applied: await applyBrandToProduct(item.sku, {
+          brand: item.brand,
+          brandSpecId: config.integrations.tilda.brandSpecId,
+          brandCategoryId,
+        }),
+      };
+    }),
+  );
 
   return {
     status: 'stub',
@@ -327,5 +364,6 @@ export function syncCatalogBatch(payload: SyncCatalogBatchPayload) {
     overrideSummary,
     normalized,
     synced,
+    brands: brandsApplied,
   };
 }

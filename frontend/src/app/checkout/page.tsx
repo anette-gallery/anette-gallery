@@ -147,8 +147,6 @@ function buildInitialForm(searchParams: SearchParamsInput) {
     },
     deliveryMethod: readString(searchParams.delivery) || 'courier',
     paymentMethod,
-    loyaltyCardNumber:
-      readString(searchParams.loyaltyCardNumber) || readString(searchParams.card),
     promoCode: readString(searchParams.promoCode) || readString(searchParams.promo),
     giftCardNumber:
       readString(searchParams.giftCardNumber) ||

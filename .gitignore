@@ -11,3 +11,10 @@ frontend/node_modules
 backend/node_modules
 frontend/.next
 backend/dist
+
+# Data artifacts
+*.csv
+*.pdf
+*.xlsx
+*.xls
+onec/*.tmp

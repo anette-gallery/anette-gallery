@@ -82,7 +82,6 @@ export type CheckoutFormState = {
   };
   deliveryMethod: string;
   paymentMethod: PaymentMethod;
-  loyaltyCardNumber: string;
   promoCode: string;
   giftCardNumber: string;
   comment: string;
@@ -168,7 +167,6 @@ function readStoredProfile(): Partial<CheckoutFormState> | null {
           }
         : undefined,
       deliveryMethod: readString(parsed.deliveryMethod),
-      loyaltyCardNumber: readString(parsed.loyaltyCardNumber),
     };
   } catch {
     return null;
@@ -215,7 +213,6 @@ function mergeStoredProfile(
       form.deliveryMethod !== DELIVERY_OPTIONS[0].value
         ? form.deliveryMethod
         : storedProfile.deliveryMethod || form.deliveryMethod,
-    loyaltyCardNumber: form.loyaltyCardNumber || storedProfile.loyaltyCardNumber || '',
   };
 }
 
@@ -225,7 +222,6 @@ function buildStoredProfile(form: CheckoutFormState) {
       ...form.customer,
     },
     deliveryMethod: form.deliveryMethod,
-    loyaltyCardNumber: form.loyaltyCardNumber.trim(),
   };
 }
 
@@ -248,13 +244,8 @@ function buildAddress(customer: CheckoutFormState['customer']) {
 }
 
 function buildOrderComment(form: CheckoutFormState) {
-  const commentParts = [form.comment.trim()];
-
-  if (form.loyaltyCardNumber.trim()) {
-    commentParts.push(`Карта лояльности: ${form.loyaltyCardNumber.trim()}`);
-  }
-
-  return commentParts.filter(Boolean).join('. ') || undefined;
+  const comment = form.comment.trim();
+  return comment || undefined;
 }
 
 function buildCalculationPayload(
@@ -296,7 +287,6 @@ function buildOrderPayload(
     },
     deliveryMethod: getDeliveryOption(form.deliveryMethod).summary,
     paymentMethod: form.paymentMethod,
-    loyaltyCardNumber: form.loyaltyCardNumber.trim() || undefined,
     promoCode: normalizeDiscountCode(form.promoCode) || undefined,
     giftCardNumber: normalizeDiscountCode(form.giftCardNumber) || undefined,
     comment: buildOrderComment(form),
@@ -833,7 +823,6 @@ export default function CheckoutClient({
       },
       promoCode: '',
       giftCardNumber: '',
-      loyaltyCardNumber: '',
       comment: '',
     }));
     window.setTimeout(() => {
@@ -996,14 +985,12 @@ export default function CheckoutClient({
             ...form,
             promoCode: '',
             giftCardNumber: '',
-            loyaltyCardNumber: '',
           }
         : await resolveDiscountFields(form);
 
       if (
         resolvedForm.promoCode !== form.promoCode ||
-        resolvedForm.giftCardNumber !== form.giftCardNumber ||
-        resolvedForm.loyaltyCardNumber !== form.loyaltyCardNumber
+        resolvedForm.giftCardNumber !== form.giftCardNumber
       ) {
         setForm(resolvedForm);
       }
@@ -1436,19 +1423,6 @@ export default function CheckoutClient({
                     />
                   </label>
                 </div>
-
-                <label className={styles.lineField}>
-                  <input
-                    value={form.loyaltyCardNumber}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        loyaltyCardNumber: event.target.value,
-                      }))
-                    }
-                    placeholder="Если есть карта"
-                  />
-                </label>
 
                 <div className={styles.inlineActions}>
                   <button

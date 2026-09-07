@@ -566,7 +566,32 @@ async function calculateAction(
       : [];
     const totalDiscount = readNumericValue(summary.totalDiscount);
     const prepaidAmount = readNumericValue(summary.prepaidAmount);
-    const total = Math.max(0, subtotal - totalDiscount - prepaidAmount);
+
+    const hasPromo = Boolean(payload.promoCode);
+    const hasGiftCards = giftCards.length > 0 || prepaidAmount > 0;
+    const hasClientOnly = Boolean(payload.phone) && !hasPromo && !hasGiftCards;
+
+    const MAX_CLIENT_DISCOUNT_RATIO = 0.15;
+    const maxClientDiscount = Math.floor(subtotal * MAX_CLIENT_DISCOUNT_RATIO);
+    let appliedDiscount = totalDiscount;
+    let appliedDiscountReason: string | null = null;
+
+    if (
+      hasClientOnly &&
+      totalDiscount > 0 &&
+      totalDiscount > maxClientDiscount &&
+      subtotal > 0
+    ) {
+      const appliedPct = (totalDiscount / subtotal) * 100;
+      appliedDiscount = maxClientDiscount;
+      appliedDiscountReason =
+        `Клиентская скидка ${appliedPct.toFixed(1)}% (${totalDiscount} ₽) ` +
+        `превысила лимит ${(MAX_CLIENT_DISCOUNT_RATIO * 100).toFixed(0)}% от суммы заказа. ` +
+        `Применён безопасный потолок ${maxClientDiscount} ₽. Проверьте персональные правила в ЛК MAXMA.`;
+    }
+
+    const total = Math.max(0, subtotal - appliedDiscount - prepaidAmount);
+    const discountPct = subtotal > 0 ? (appliedDiscount / subtotal) * 100 : 0;
 
     return {
       status: 'ok',
@@ -581,8 +606,12 @@ async function calculateAction(
           ...(typeof summary.discounts === 'object' && summary.discounts !== null
             ? (summary.discounts as Record<string, unknown>)
             : {}),
-          totalDiscount,
+          totalDiscount: appliedDiscount,
           prepaidAmount,
+          discountPct,
+          isClientOnly: hasClientOnly,
+          capApplied: appliedDiscountReason !== null,
+          capReason: appliedDiscountReason,
         },
       ],
       payload,
@@ -605,6 +634,19 @@ async function calculateAction(
       },
       promocode,
       giftCards,
+      diagnostics: {
+        subtotal,
+        totalDiscountRaw: totalDiscount,
+        totalDiscountApplied: appliedDiscount,
+        maxAllowedClientDiscount: maxClientDiscount,
+        discountPct,
+        flags: {
+          hasPromo,
+          hasGiftCards,
+          hasClientOnly,
+          capApplied: appliedDiscountReason !== null,
+        },
+      },
       rawResponse: responseBody,
     };
   } catch (error) {
